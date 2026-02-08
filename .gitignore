@@ -1,0 +1,8 @@
+.env
+*.lock.lock
+*.tmp
+node_modules/
+.idea/
+*.iml
+vendor/
+.bundle/

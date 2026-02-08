@@ -1,0 +1,60 @@
+name: FPDS Modified Awards v3 Ingestion
+# Description: Ingests and normalizes modified FPDS awards (v3) into the database (daily schedule).
+
+on:
+  schedule:
+    # Once daily at 03:00 UTC
+    - cron: '0 3 * * *'
+  workflow_dispatch: {}
+
+permissions:
+  contents: read
+
+concurrency:
+  group: fpds-modified-awards-v3
+  cancel-in-progress: false
+
+jobs:
+  run-ingestion:
+    name: Run fetch_fpds_modified_awards_normalized_v3.rb
+    runs-on: ubuntu-latest
+    timeout-minutes: 300
+    env:
+      # Configure one of these in your repository secrets
+      POSTGRES_URL: ${{ secrets.POSTGRES_URL }}
+      PG_URL: ${{ secrets.PG_URL }}
+      POSTGRES_HOST: ${{ secrets.POSTGRES_HOST }}
+      POSTGRES_DATABASE: ${{ secrets.POSTGRES_DATABASE }}
+      POSTGRES_USER: ${{ secrets.POSTGRES_USER }}
+      POSTGRES_PASSWORD: ${{ secrets.POSTGRES_PASSWORD }}
+      POSTGRES_SSLMODE: ${{ secrets.POSTGRES_SSLMODE }}
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Ruby
+        uses: ruby/setup-ruby@v1
+        with:
+          ruby-version: '3.2'
+          bundler-cache: true
+
+      - name: Install system dependencies (for pg gem)
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libpq-dev
+
+      - name: Prepare DB environment
+        shell: bash
+        run: |
+          # If only PG_URL is set, map it to POSTGRES_URL for the app
+          if [ -z "${POSTGRES_URL}" ] && [ -n "${PG_URL}" ]; then
+            echo "POSTGRES_URL=${PG_URL}" >> $GITHUB_ENV
+          fi
+
+      - name: Run ingestion script
+        if: ${{ env.POSTGRES_URL != '' || env.PG_URL != '' || env.POSTGRES_HOST != '' }}
+        run: bundle exec ruby scripts/fetch_fpds_modified_awards_normalized_v3.rb
+
+      - name: Skip (no DB configuration found)
+        if: ${{ !(env.POSTGRES_URL != '' || env.PG_URL != '' || env.POSTGRES_HOST != '') }}
+        run: echo "No database connection secrets configured. Set POSTGRES_URL or PG_URL, or POSTGRES_HOST/POSTGRES_DATABASE/POSTGRES_USER/POSTGRES_PASSWORD."
