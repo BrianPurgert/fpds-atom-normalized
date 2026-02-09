@@ -20,7 +20,7 @@ module Database
             else
               Sequel.connect(
                 adapter:  'postgres',
-                host:     ENV['POSTGRES_HOST'] || 'localhost',
+                host:     ENV['POSTGRES_HOST'] ,
                 database: ENV['POSTGRES_DATABASE'] || 'fpds_data',
                 user:     ENV['POSTGRES_USER'] || 'postgres',
                 password: ENV['POSTGRES_PASSWORD'] || 'password',
