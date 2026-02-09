@@ -1,5 +1,5 @@
 name: FPDS Modified Awards v3 Ingestion
-# Description: Ingests and normalizes modified FPDS awards (v3) into the database (daily schedule).
+# Description: Ingests and normalizes modified FPDS awards into the database (daily schedule).
 
 on:
   schedule:
