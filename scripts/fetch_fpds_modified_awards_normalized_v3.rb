@@ -18,6 +18,7 @@ require "addressable"
 require 'openssl'
 
 require_relative '../lib/parsers'
+require_relative '../lib/normalizer'
 Dotenv.load(File.expand_path('../.env', __dir__))
 
 
@@ -139,17 +140,18 @@ def setup_database(db, logger)
 			primary_key :id
 			String :atom_entry_id, null: false, type: :varchar, size: 64, unique: true
 			String :atom_title, text: true
-			DateTime :atom_feed_modified_date # From <entry><modified>
-			String :piid, null: false # Can be non-unique if modNumber differs
+			DateTime :atom_feed_modified_date
+			String :piid, null: false
 			String :modification_number, default: '0'
+			String :record_type, text: true
 
-			foreign_key :vendor_id, :fpds_vendors, null: true # Allow null if vendor cannot be identified/created
-			foreign_key :agency_id, :fpds_agencies # Contracting Office Agency ID
+			foreign_key :vendor_id, :fpds_vendors, null: true
+			foreign_key :agency_id, :fpds_agencies, null: true
 
 			DateTime :effective_date
 			Date :last_date_to_order
 			Date :completion_date
-			Float :obligated_amount # Already present in user's original code, added here for completeness
+			Float :obligated_amount
 			Float :base_and_all_options_value
 			Float :total_estimated_order_value
 
@@ -164,20 +166,274 @@ def setup_database(db, logger)
 			String :action_type_description
 			String :pricing_type_code
 			String :pricing_type_description
-			DateTime :fpds_last_modified_date # From <transactionInformation><lastModifiedDate>
+			DateTime :fpds_last_modified_date
 
 			String :raw_xml_content_sha256, size: 64
 			String :reason_for_modification, text: true
 			column :atom_content, :jsonb
 
+			# Award/Contract ID
+			String :referenced_idv_piid, text: true
+			String :referenced_idv_mod_number, text: true
+			String :referenced_idv_agency_id, text: true
+			String :transaction_number, text: true
+
+			# Competition
+			String :extent_competed, text: true
+			String :solicitation_procedures, text: true
+			String :type_of_set_aside, text: true
+			String :type_of_set_aside_source, text: true
+			String :evaluated_preference, text: true
+			Integer :number_of_offers_received
+			String :number_of_offers_source, text: true
+			String :commercial_item_acquisition_procedures, text: true
+			String :commercial_item_test_program, text: true
+			String :a76_action, text: true
+			String :fed_biz_opps, text: true
+			String :local_area_set_aside, text: true
+			String :fair_opportunity_limited_sources, text: true
+			String :reason_not_competed, text: true
+			String :competitive_procedures, text: true
+			String :research, text: true
+			String :small_business_competitiveness_demo, text: true
+			String :idv_type_of_set_aside, text: true
+			Integer :idv_number_of_offers_received
+
+			# Contract Data
+			String :cost_or_pricing_data, text: true
+			String :contract_financing, text: true
+			String :gfe_gfp, text: true
+			String :sea_transportation, text: true
+			String :undefinitized_action, text: true
+			String :consolidated_contract, text: true
+			String :performance_based_service_contract, text: true
+			String :multi_year_contract, text: true
+			String :contingency_humanitarian_peacekeeping_operation, text: true
+			String :purchase_card_as_payment_method, text: true
+			String :number_of_actions, text: true
+			String :referenced_idv_type, text: true
+			String :referenced_idv_multiple_or_single, text: true
+			String :major_program_code, text: true
+			String :national_interest_action_code, text: true
+			String :cost_accounting_standards_clause, text: true
+			String :inherently_governmental_function, text: true
+			String :solicitation_id, text: true
+			String :type_of_idc, text: true
+			String :multiple_or_single_award_idc, text: true
+
+			# Dollar Values
+			Float :base_and_exercised_options_value
+			Float :total_obligated_amount
+			Float :total_base_and_all_options_value
+			Float :total_base_and_exercised_options_value
+
+			# Legislative Mandates
+			String :clinger_cohen_act, text: true
+			String :construction_wage_rate_requirements, text: true
+			String :labor_standards, text: true
+			String :materials_supplies_articles_equipment, text: true
+			String :interagency_contracting_authority, text: true
+			String :other_statutory_authority, text: true
+
+			# Place of Performance
+			String :pop_street_address, text: true
+			String :pop_city, text: true
+			String :pop_state_code, text: true
+			String :pop_zip_code, text: true
+			String :pop_country_code, text: true
+			String :pop_congressional_district, text: true
+
+			# Relevant Contract Dates
+			Date :signed_date
+			Date :current_completion_date
+			Date :ultimate_completion_date
+
+			# Transaction Information
+			String :created_by, text: true
+			DateTime :created_date
+			String :last_modified_by, text: true
+			String :transaction_status, text: true
+			String :approved_by, text: true
+			DateTime :approved_date
+			String :closed_status, text: true
+			String :closed_by, text: true
+			DateTime :closed_date
+
+			# Contract Marketing Data
+			String :fee_paid_for_use_of_service, text: true
+			String :who_can_use, text: true
+			String :ordering_procedure, text: true
+			String :individual_order_limit, text: true
+			String :type_of_fee_for_use_of_service, text: true
+			String :contract_marketing_email, text: true
+
+			# Product/Service Info
+			String :claimant_program_code, text: true
+			String :contract_bundling, text: true
+			String :country_of_origin, text: true
+			String :information_technology_commercial_item_category, text: true
+			String :manufacturing_organization_type, text: true
+			String :place_of_manufacture, text: true
+			String :recovered_material_clauses, text: true
+			String :system_equipment_code, text: true
+			String :use_of_epa_designated_products, text: true
+
+			# Purchaser / Vendor / Preference
+			String :foreign_funding, text: true
+			String :contracting_officer_business_size_determination, text: true
+			String :subcontract_plan, text: true
+
+			# Generic Tags
+			column :generic_strings, :jsonb
+			column :generic_booleans, :jsonb
+
 			DateTime :fetched_at, default: Sequel::CURRENT_TIMESTAMP
 			DateTime :db_updated_at, default: Sequel::CURRENT_TIMESTAMP
 
-			index [:piid, :modification_number] # Common query pattern
+			index [:piid, :modification_number]
 			index :raw_xml_content_sha256
 			index :fpds_last_modified_date
+			index :record_type
 		end
 		logger.info "Created table: fpds_contract_actions"
+	end
+
+	unless db.table_exists?(:fpds_contract_vendor_details)
+		db.create_table(:fpds_contract_vendor_details) do
+			primary_key :id
+			foreign_key :contract_action_id, :fpds_contract_actions, null: false, unique: true, on_delete: :cascade
+			String :vendor_name, text: true
+			String :vendor_alternate_name, text: true
+			String :vendor_legal_organization_name, text: true
+			String :vendor_doing_business_as_name, text: true
+			TrueClass :vendor_enabled
+			String :uei, text: true
+			String :ultimate_parent_uei, text: true
+			String :uei_legal_business_name, text: true
+			String :ultimate_parent_uei_name, text: true
+			String :cage_code, text: true
+			String :street_address, text: true
+			String :city, text: true
+			String :state, text: true
+			String :zip_code, text: true
+			String :country_code, text: true
+			String :phone_no, text: true
+			String :fax_no, text: true
+			String :congressional_district, text: true
+			TrueClass :vendor_location_disabled_flag
+			String :entity_data_source, text: true
+			Date :registration_date
+			Date :renewal_date
+			String :vendor_alternate_site_code, text: true
+			TrueClass :is_alaskan_native_owned_corporation_or_firm
+			TrueClass :is_american_indian_owned
+			TrueClass :is_indian_tribe
+			TrueClass :is_native_hawaiian_owned_organization_or_firm
+			TrueClass :is_tribally_owned_firm
+			TrueClass :is_veteran_owned
+			TrueClass :is_service_related_disabled_veteran_owned_business
+			TrueClass :is_women_owned
+			TrueClass :is_women_owned_small_business
+			TrueClass :is_economically_disadvantaged_women_owned_small_business
+			TrueClass :is_joint_venture_women_owned_small_business
+			TrueClass :is_joint_venture_economically_disadvantaged_women_owned_small_business
+			TrueClass :is_small_business
+			TrueClass :is_very_small_business
+			TrueClass :is_minority_owned
+			TrueClass :is_subcontinent_asian_american_owned_business
+			TrueClass :is_asian_pacific_american_owned_business
+			TrueClass :is_black_american_owned_business
+			TrueClass :is_hispanic_american_owned_business
+			TrueClass :is_native_american_owned_business
+			TrueClass :is_other_minority_owned
+			TrueClass :is_community_developed_corporation_owned_firm
+			TrueClass :is_labor_surplus_area_firm
+			TrueClass :is_federal_government
+			TrueClass :is_federally_funded_research_and_development_corp
+			TrueClass :is_federal_government_agency
+			TrueClass :is_state_government
+			TrueClass :is_local_government
+			TrueClass :is_city_local_government
+			TrueClass :is_county_local_government
+			TrueClass :is_inter_municipal_local_government
+			TrueClass :is_local_government_owned
+			TrueClass :is_municipality_local_government
+			TrueClass :is_school_district_local_government
+			TrueClass :is_township_local_government
+			TrueClass :is_tribal_government
+			TrueClass :is_foreign_government
+			TrueClass :is_corporate_entity_not_tax_exempt
+			TrueClass :is_corporate_entity_tax_exempt
+			TrueClass :is_partnership_or_limited_liability_partnership
+			TrueClass :is_sole_proprietorship
+			TrueClass :is_small_agricultural_cooperative
+			TrueClass :is_international_organization
+			TrueClass :is_us_government_entity
+			TrueClass :is_dot_certified_disadvantaged_business_enterprise
+			TrueClass :is_self_certified_small_disadvantaged_business
+			TrueClass :is_sba_certified_small_disadvantaged_business
+			TrueClass :is_sba_certified_8a_program_participant
+			TrueClass :is_self_certified_hubzone_joint_venture
+			TrueClass :is_sba_certified_hubzone
+			TrueClass :is_sba_certified_8a_joint_venture
+			String :organizational_type, text: true
+			TrueClass :is_sheltered_workshop
+			TrueClass :is_limited_liability_corporation
+			TrueClass :is_subchapter_s_corporation
+			TrueClass :is_foreign_owned_and_located
+			String :country_of_incorporation, text: true
+			String :state_of_incorporation, text: true
+			TrueClass :is_for_profit_organization
+			TrueClass :is_nonprofit_organization
+			TrueClass :is_other_not_for_profit_organization
+			TrueClass :is_1862_land_grant_college
+			TrueClass :is_1890_land_grant_college
+			TrueClass :is_1994_land_grant_college
+			TrueClass :is_historically_black_college_or_university
+			TrueClass :is_minority_institution
+			TrueClass :is_private_university_or_college
+			TrueClass :is_school_of_forestry
+			TrueClass :is_state_controlled_institution_of_higher_learning
+			TrueClass :is_tribal_college
+			TrueClass :is_veterinary_college
+			TrueClass :is_alaskan_native_servicing_institution
+			TrueClass :is_native_hawaiian_servicing_institution
+			TrueClass :is_airport_authority
+			TrueClass :is_council_of_governments
+			TrueClass :is_housing_authorities_public_or_tribal
+			TrueClass :is_interstate_entity
+			TrueClass :is_planning_commission
+			TrueClass :is_port_authority
+			TrueClass :is_transit_authority
+			TrueClass :receives_contracts
+			TrueClass :receives_grants
+			TrueClass :receives_contracts_and_grants
+			DateTime :created_at, default: Sequel::CURRENT_TIMESTAMP
+			DateTime :updated_at, default: Sequel::CURRENT_TIMESTAMP
+			index :uei
+			index :contract_action_id
+		end
+		logger.info "Created table: fpds_contract_vendor_details"
+	end
+
+	unless db.table_exists?(:fpds_treasury_accounts)
+		db.create_table(:fpds_treasury_accounts) do
+			primary_key :id
+			foreign_key :contract_action_id, :fpds_contract_actions, null: false, on_delete: :cascade
+			String :agency_identifier, text: true
+			String :main_account_code, text: true
+			String :sub_account_code, text: true
+			String :sub_level_prefix_code, text: true
+			String :allocation_transfer_agency_identifier, text: true
+			String :beginning_period_of_availability, text: true
+			String :ending_period_of_availability, text: true
+			String :availability_type_code, text: true
+			String :initiative, text: true
+			Float :obligated_amount
+			DateTime :created_at, default: Sequel::CURRENT_TIMESTAMP
+			index :contract_action_id
+		end
+		logger.info "Created table: fpds_treasury_accounts"
 	end
 
 	unless db.table_exists?(:job_tracker)
@@ -210,6 +466,10 @@ class ProductOrServiceCode < Sequel::Model(:fpds_product_or_service_codes); end
 class NaicsCode < Sequel::Model(:fpds_naics_codes); end
 
 class ContractAction < Sequel::Model(:fpds_contract_actions); end
+
+class ContractVendorDetail < Sequel::Model(:fpds_contract_vendor_details); end
+
+class TreasuryAccount < Sequel::Model(:fpds_treasury_accounts); end
 
 class JobTracker < Sequel::Model(:job_tracker); end
 
@@ -456,67 +716,56 @@ def process_page_batch(entries_xml_strings, logger)
 		logger.info "Stage 4: Bulk inserted new lookup items and updated caches."
 
 		# === Stage 5: Build final contract_actions batch with all FKs resolved ===
+		vendor_details_queue  = [] # Array of { entry_hash_id:, vendor_details: }
+		treasury_accounts_queue = [] # Array of { entry_hash_id:, accounts: [...] }
+
 		page_lookups[:entry_hashes].each do |entry_hash_id, entry_data|
-			# Loop over NEW entries AGAIN
 			content_node = entry_data[:content_node]
 
-			uei       = content_node.at_xpath('//vendorSiteDetails/entityIdentifiers/vendorUEIInformation/UEI')&.text&.strip
+			uei       = content_node.at_xpath('.//vendorSiteDetails/entityIdentifiers/vendorUEIInformation/UEI')&.text&.strip
 			vendor_id = (uei && !uei.empty?) ? id_caches[:vendors][uei] : nil
+			vendor_id = vendor_id.is_a?(Integer) ? vendor_id : nil
 
-			logger.debug "Attempting to build contract action for entry_hash_id: #{entry_hash_id}, UEI: #{uei}, Resolved vendor_id: #{vendor_id.inspect}"
-
-			unless vendor_id.is_a?(Integer)
-				logger.warn "Skipping contract action for entry_hash_id #{entry_hash_id} (title: #{entry_data[:title]}) due to unresolved or missing vendor_id (UEI: #{uei})."
-				next
-			end
-
-			# Contracting Office Agency (primary agency for the contract)
-			ca_code   = content_node.at_xpath('//purchaserInformation/contractingOfficeAgencyID')&.text&.strip
+			# Contracting Office Agency
+			ca_code   = content_node.at_xpath('.//purchaserInformation/contractingOfficeAgencyID')&.text&.strip
 			agency_id = (ca_code && !ca_code.empty?) ? id_caches[:agencies][ca_code] : nil
-			unless agency_id.is_a?(Integer)
-				logger.warn "Contract action for entry_hash_id #{entry_hash_id} will have NULL agency_id (Contracting Office Agency Code: #{ca_code})."
-			end
 
 			# Resolve other FKs
-			co_code               = content_node.at_xpath('//purchaserInformation/contractingOfficeID')&.text&.strip
+			co_code               = content_node.at_xpath('.//purchaserInformation/contractingOfficeID')&.text&.strip
 			contracting_office_id = (co_code && !co_code.empty?) ? id_caches[:offices][co_code] : nil
 
-			fa_code_val       = content_node.at_xpath('//purchaserInformation/fundingRequestingAgencyID')&.text&.strip
+			fa_code_val       = content_node.at_xpath('.//purchaserInformation/fundingRequestingAgencyID')&.text&.strip
 			funding_agency_id = (fa_code_val && !fa_code_val.empty?) ? id_caches[:agencies][fa_code_val] : nil
 
-			fo_code_val       = content_node.at_xpath('//purchaserInformation/fundingRequestingOfficeID')&.text&.strip
+			fo_code_val       = content_node.at_xpath('.//purchaserInformation/fundingRequestingOfficeID')&.text&.strip
 			funding_office_id = (fo_code_val && !fo_code_val.empty?) ? id_caches[:offices][fo_code_val] : nil
 
-			psc_code_val               = content_node.at_xpath('//productOrServiceInformation/productOrServiceCode')&.text&.strip
+			psc_code_val               = content_node.at_xpath('.//productOrServiceInformation/productOrServiceCode')&.text&.strip
 			product_or_service_code_id = (psc_code_val && !psc_code_val.empty?) ? id_caches[:pscs][psc_code_val] : nil
 
-			naics_code_val = content_node.at_xpath('//productOrServiceInformation/principalNAICSCode')&.text&.strip
+			naics_code_val = content_node.at_xpath('.//productOrServiceInformation/principalNAICSCode')&.text&.strip
 			naics_code_id  = (naics_code_val && !naics_code_val.empty?) ? id_caches[:naics][naics_code_val] : nil
 
 			content_xml_string = content_node.to_s
 			raw_xml_sha256     = Digest::SHA256.hexdigest(content_xml_string)
 
-			# Parse atom content with Nori for reasonForModification and jsonb storage
+			# Parse atom content with Nori for jsonb storage
 			begin
 				nori_hash = Nori.new({
 					strip_namespaces:              true,
 					delete_namespace_attributes:   false,
-					convert_tags_to:               'underscore',
 					convert_attributes_to:         nil,
 					empty_tag_value:               nil,
 					advanced_typecasting:          true,
-					convert_dashes_to_underscores: true,
+					convert_dashes_to_underscores: false,
 					scrub_xml:                     true,
 					parser:                        :nokogiri
 				}).parse(content_xml_string)
 
-				# Extract reasonForModification from the parsed hash
 				reason_for_modification = nori_hash.dig('award', 'contractData', 'reasonForModification') ||
-				                         nori_hash.dig('award', 'contract_data', 'reason_for_modification') ||
-				                         nori_hash.dig('idv', 'contractData', 'reasonForModification') ||
-				                         nori_hash.dig('idv', 'contract_data', 'reason_for_modification') ||
-				                         nori_hash.dig('contractData', 'reasonForModification') ||
-				                         nori_hash.dig('contract_data', 'reason_for_modification')
+				                         nori_hash.dig('IDV', 'contractData', 'reasonForModification') ||
+				                         nori_hash.dig('OtherTransactionAward', 'contractDetail', 'reasonForModification') ||
+				                         nori_hash.dig('OtherTransactionIDV', 'contractDetail', 'reasonForModification')
 
 				atom_content_json = nori_hash.to_json
 			rescue => e
@@ -525,22 +774,53 @@ def process_page_batch(entries_xml_strings, logger)
 				atom_content_json = nil
 			end
 
-			actions_to_create << {
+			# Extract generic tags
+			generic_strings_hash  = nil
+			generic_booleans_hash = nil
+			gs_node = content_node.at_xpath('.//genericTags/genericStrings')
+			if gs_node
+				h = {}
+				gs_node.element_children.each { |c| h[c.name] = c.text&.strip }
+				generic_strings_hash = h.to_json unless h.empty?
+			end
+			gb_node = content_node.at_xpath('.//genericTags/genericBooleans')
+			if gb_node
+				h = {}
+				gb_node.element_children.each { |c| h[c.name] = Normalizer.to_bool(c.text&.strip) }
+				generic_booleans_hash = h.to_json unless h.empty?
+			end
+
+			# Extract all normalized fields via Normalizer
+			normalized = Normalizer.extract_all_action_fields(content_node, Parsers)
+
+			# Also handle PIID from OtherTransaction types
+			piid = content_node.at_xpath('.//awardID/awardContractID/PIID')&.text&.strip ||
+			       content_node.at_xpath('.//contractID/IDVID/PIID')&.text&.strip ||
+			       content_node.at_xpath('.//OtherTransactionAwardID/OtherTransactionAwardContractID/PIID')&.text&.strip ||
+			       content_node.at_xpath('.//OtherTransactionIDVID/OtherTransactionIDVContractID/PIID')&.text&.strip ||
+			       'UNKNOWN_PIID'
+
+			mod_number = content_node.at_xpath('.//awardID/awardContractID/modNumber')&.text&.strip ||
+			             content_node.at_xpath('.//contractID/IDVID/modNumber')&.text&.strip ||
+			             content_node.at_xpath('.//OtherTransactionAwardID/OtherTransactionAwardContractID/modNumber')&.text&.strip ||
+			             content_node.at_xpath('.//OtherTransactionIDVID/OtherTransactionIDVContractID/modNumber')&.text&.strip ||
+			             '0'
+
+			action_record = {
 			atom_entry_id:           entry_hash_id,
 			atom_title:              entry_data[:title],
 			atom_feed_modified_date: entry_data[:modified],
-			piid:                    content_node.at_xpath('//awardID/awardContractID/PIID | //contractID/IDVID/PIID')&.text&.strip || 'UNKNOWN_PIID',
-			modification_number:     content_node.at_xpath('//awardID/awardContractID/modNumber | //contractID/IDVID/modNumber')&.text&.strip || '0',
-			vendor_id:               vendor_id, # Integer or will fail FK constraint if table expects int
-			agency_id: agency_id.is_a?(Integer) ? agency_id : nil, # Integer or nil
+			piid:                    piid,
+			modification_number:     mod_number,
+			vendor_id:               vendor_id,
+			agency_id:               agency_id.is_a?(Integer) ? agency_id : nil,
 
-			obligated_amount: parse_float(content_node.at_xpath('//dollarValues/obligatedAmount')&.text),
-			# signed_date field removed as it doesn't exist in the database schema
-			effective_date:              parse_datetime(content_node.at_xpath('//relevantContractDates/effectiveDate')&.text),
-			last_date_to_order:          parse_date(content_node.at_xpath('//relevantContractDates/lastDateToOrder')&.text),
-			completion_date:             parse_date(content_node.at_xpath('//relevantContractDates/completionDate')&.text),
-			base_and_all_options_value:  parse_float(content_node.at_xpath('//dollarValues/baseAndAllOptionsValue')&.text),
-			total_estimated_order_value: parse_float(content_node.at_xpath('//dollarValues/totalEstimatedOrderValue')&.text),
+			obligated_amount:            parse_float(content_node.at_xpath('.//dollarValues/obligatedAmount')&.text),
+			effective_date:              parse_datetime(content_node.at_xpath('.//relevantContractDates/effectiveDate')&.text),
+			last_date_to_order:          parse_date(content_node.at_xpath('.//relevantContractDates/lastDateToOrder')&.text),
+			completion_date:             parse_date(content_node.at_xpath('.//relevantContractDates/completionDate')&.text),
+			base_and_all_options_value:  parse_float(content_node.at_xpath('.//dollarValues/baseAndAllOptionsValue')&.text),
+			total_estimated_order_value: parse_float(content_node.at_xpath('.//dollarValues/totalEstimatedOrderValue')&.text),
 
 			contracting_office_id:       contracting_office_id.is_a?(Integer) ? contracting_office_id : nil,
 			funding_agency_id:           funding_agency_id.is_a?(Integer) ? funding_agency_id : nil,
@@ -548,30 +828,83 @@ def process_page_batch(entries_xml_strings, logger)
 			product_or_service_code_id:  product_or_service_code_id.is_a?(Integer) ? product_or_service_code_id : nil,
 			naics_code_id:               naics_code_id.is_a?(Integer) ? naics_code_id : nil,
 
-			description_of_requirement:  content_node.at_xpath('//contractData/descriptionOfContractRequirement')&.text&.strip,
-			action_type_code:            content_node.at_xpath('//contractData/contractActionType')&.text&.strip,
-			action_type_description:     content_node.at_xpath('//contractData/contractActionType/@description')&.text&.strip,
-			pricing_type_code:           content_node.at_xpath('//contractData/typeOfContractPricing')&.text&.strip,
-			pricing_type_description:    content_node.at_xpath('//contractData/typeOfContractPricing/@description')&.text&.strip,
-			fpds_last_modified_date:     parse_datetime(content_node.at_xpath('//transactionInformation/lastModifiedDate')&.text),
+			description_of_requirement:  content_node.at_xpath('.//contractData/descriptionOfContractRequirement')&.text&.strip,
+			action_type_code:            content_node.at_xpath('.//contractData/contractActionType')&.text&.strip,
+			action_type_description:     content_node.at_xpath('.//contractData/contractActionType/@description')&.text&.strip,
+			pricing_type_code:           content_node.at_xpath('.//contractData/typeOfContractPricing')&.text&.strip,
+			pricing_type_description:    content_node.at_xpath('.//contractData/typeOfContractPricing/@description')&.text&.strip,
+			fpds_last_modified_date:     parse_datetime(content_node.at_xpath('.//transactionInformation/lastModifiedDate')&.text),
 			raw_xml_content_sha256:      raw_xml_sha256,
 			reason_for_modification:     reason_for_modification,
 			atom_content:                atom_content_json,
-			# fetched_at and db_updated_at have defaults in DB schema
-			}
+			generic_strings:             generic_strings_hash,
+			generic_booleans:            generic_booleans_hash,
+			}.merge(normalized)
+
+			actions_to_create << action_record
+
+			# Queue vendor details for post-insert
+			vd = Normalizer.extract_vendor_details(content_node, Parsers)
+			vendor_details_queue << { entry_hash_id: entry_hash_id, vendor_details: vd } if vd && !vd.empty?
+
+			# Queue treasury accounts for post-insert
+			ta = Normalizer.extract_treasury_accounts(content_node)
+			treasury_accounts_queue << { entry_hash_id: entry_hash_id, accounts: ta } unless ta.empty?
 		end
 		logger.info "Stage 5: Built final contract_actions batch. Size: #{actions_to_create.size}."
 
 		unless actions_to_create.empty?
 			begin
-				ContractAction.multi_insert(actions_to_create, commit_every: 100) # commit_every for large batches
+				ContractAction.multi_insert(actions_to_create, commit_every: 100)
 				logger.info "Batch inserted #{actions_to_create.size} new contract actions."
 			rescue Sequel::UniqueConstraintViolation => e
-				logger.error "Unique constraint violation during ContractAction multi_insert: #{e.message}. This might happen if atom_entry_id was already processed in a rare edge case."
+				logger.error "Unique constraint violation during ContractAction multi_insert: #{e.message}."
 			rescue StandardError => e
 				logger.error "Error during ContractAction multi_insert: #{e.message}"
-				raise e # Re-raise to ensure transaction rollback
+				raise e
 			end
+
+			# === Stage 6: Insert vendor details and treasury accounts ===
+			unless vendor_details_queue.empty? && treasury_accounts_queue.empty?
+				# Build a mapping from atom_entry_id -> contract_action.id
+				entry_ids = actions_to_create.map { |a| a[:atom_entry_id] }
+				id_map = ContractAction.where(atom_entry_id: entry_ids).select_map([:atom_entry_id, :id]).to_h
+
+				# Insert vendor details
+				unless vendor_details_queue.empty?
+					vd_records = vendor_details_queue.filter_map do |item|
+						ca_id = id_map[item[:entry_hash_id]]
+						next unless ca_id
+						item[:vendor_details].merge(contract_action_id: ca_id)
+					end
+					unless vd_records.empty?
+						begin
+							ContractVendorDetail.multi_insert(vd_records, commit_every: 100)
+							logger.info "Batch inserted #{vd_records.size} vendor detail records."
+						rescue StandardError => e
+							logger.error "Error inserting vendor details: #{e.message}"
+						end
+					end
+				end
+
+				# Insert treasury accounts
+				unless treasury_accounts_queue.empty?
+					ta_records = treasury_accounts_queue.flat_map do |item|
+						ca_id = id_map[item[:entry_hash_id]]
+						next [] unless ca_id
+						item[:accounts].map { |acc| acc.merge(contract_action_id: ca_id) }
+					end
+					unless ta_records.empty?
+						begin
+							TreasuryAccount.multi_insert(ta_records, commit_every: 100)
+							logger.info "Batch inserted #{ta_records.size} treasury account records."
+						rescue StandardError => e
+							logger.error "Error inserting treasury accounts: #{e.message}"
+						end
+					end
+				end
+			end
+			logger.info "Stage 6: Inserted vendor details and treasury accounts."
 		end
 	end # End of DB.transaction
 
