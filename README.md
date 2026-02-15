@@ -48,6 +48,8 @@ Alternative individual connection parameters:
 
 ## Usage
 
+### Daily Mode (default)
+
 ```bash
 bundle exec ruby scripts/fetch_fpds_modified_awards_normalized_v3.rb
 ```
@@ -58,6 +60,35 @@ The script will:
 3. Determine the date range to fetch (based on last successful run or default)
 4. Fetch and process all pages of the Atom feed
 5. Insert new records into the normalized schema
+
+### Backfill Mode (download everything)
+
+Since the FPDS Atom feed is being decommissioned, use backfill mode to download **all** historical records:
+
+```bash
+# Download everything from FY2001 (2000-10-01) through yesterday
+bundle exec ruby scripts/fetch_fpds_modified_awards_normalized_v3.rb --backfill
+
+# Download a specific date range
+bundle exec ruby scripts/fetch_fpds_modified_awards_normalized_v3.rb --backfill --start-date 2020-01-01 --end-date 2024-12-31
+
+# Resume an interrupted backfill from where it left off
+bundle exec ruby scripts/fetch_fpds_modified_awards_normalized_v3.rb --resume
+```
+
+Backfill mode iterates day-by-day through the date range, querying the feed with closed date ranges (`LAST_MOD_DATE:[date,date]`) and paginating through all results for each day. Progress is tracked in the `job_tracker` table, so interrupted runs can be resumed with `--resume`.
+
+Existing records are automatically skipped via content-hash deduplication, so it is safe to re-run overlapping date ranges.
+
+#### Options
+
+| Flag | Description |
+|------|-------------|
+| `--backfill` | Enable backfill mode (iterate day-by-day) |
+| `--start-date YYYY-MM-DD` | Start date for backfill (default: `2000-10-01`) |
+| `--end-date YYYY-MM-DD` | End date for backfill (default: yesterday) |
+| `--resume` | Resume a previously interrupted backfill |
+| `-h`, `--help` | Show help message |
 
 ## Automation (GitHub Actions)
 

@@ -5,6 +5,7 @@ require 'open-uri'
 require 'nokogiri'
 require 'json'
 require 'stringio'
+require 'optparse'
 
 require 'nori'
 require 'sequel'
@@ -26,8 +27,10 @@ Dotenv.load(File.expand_path('../.env', __dir__))
 
 # --- Configuration ---
 JOB_NAME               = "fpds_daily_ingestion".freeze # Identifier for the job tracker
+BACKFILL_JOB_NAME      = "fpds_backfill".freeze # Identifier for the backfill job tracker
 DEFAULT_DAYS_BACK      = 2 # Used only if no previous state is found
 FETCH_TIMEOUT_SECONDS  = 4 * 60 * 60 # 4 hours, adjust as needed
+BACKFILL_EARLIEST_DATE = Date.new(2000, 10, 1) # FY2001 start — earliest FPDS data
 MODEL_PROCESSING_ORDER = [:vendors, :agencies, :pscs, :naics, :offices].freeze
 BUSINESS_KEYS          = { vendors: :uei_sam, agencies: :agency_code, offices: :office_code, pscs: :psc_code, naics: :naics_code }.freeze
 
@@ -911,6 +914,71 @@ def process_page_batch(entries_xml_strings, logger)
 	actions_to_create.size
 end
 
+# --- Backfill Logic ---
+# Downloads all historical FPDS data by iterating day-by-day through a date range.
+# Each day uses a closed date range query so the feed returns a bounded result set.
+# Progress is tracked in the job_tracker table so the backfill can resume if interrupted.
+def backfill_fpds_feed(start_date, end_date, logger)
+	total_saved = 0
+	job_tracker = JobTracker.find_or_create(job_name: BACKFILL_JOB_NAME)
+
+	# Resume from last completed date if available
+	if job_tracker.notes && job_tracker.notes.match(/Completed through (\d{4}-\d{2}-\d{2})/)
+		last_completed = Date.parse($1)
+		if last_completed >= start_date && last_completed < end_date
+			logger.info "Resuming backfill from #{last_completed + 1} (last completed: #{last_completed})"
+			start_date = last_completed + 1
+		end
+	end
+
+	current_date = start_date
+	while current_date <= end_date
+		date_str = current_date.strftime('%Y/%m/%d')
+
+		uri = Addressable::URI.parse("https://www.fpds.gov/ezsearch/FEEDS/ATOM")
+		uri.query_values = {
+			"FEEDNAME" => "PUBLIC",
+			"VERSION" => "1.5.3",
+			"q" => "LAST_MOD_DATE:[#{date_str},#{date_str}]",
+			"start" => "0"
+		}
+		day_url = uri.to_s
+
+		logger.info "Backfill: Fetching records for #{current_date} (#{(end_date - current_date).to_i} days remaining)"
+
+		begin
+			day_saved = process_fpds_feed(day_url, logger)
+			total_saved += day_saved
+			logger.info "Backfill: Saved #{day_saved} records for #{current_date} (total so far: #{total_saved})"
+
+			job_tracker.update(
+				status: 'running',
+				notes: "Completed through #{current_date}. Total saved: #{total_saved}",
+				updated_at: Time.now
+			)
+		rescue => e
+			logger.error "Backfill: Error processing #{current_date}: #{e.message}. Will retry this date on next run."
+			job_tracker.update(
+				status: 'failed',
+				notes: "Failed on #{current_date}. Completed through #{current_date - 1}. Total saved: #{total_saved}. Error: #{e.message}",
+				updated_at: Time.now
+			)
+			raise
+		end
+
+		current_date += 1
+	end
+
+	job_tracker.update(
+		status: 'idle',
+		notes: "Backfill complete. Range: #{start_date} to #{end_date}. Total saved: #{total_saved}",
+		last_successful_run_start_time: Time.now,
+		updated_at: Time.now
+	)
+	logger.info "Backfill complete! Processed #{start_date} through #{end_date}. Total saved: #{total_saved}"
+	total_saved
+end
+
 # --- Data Fetching Logic ---
 def process_fpds_feed(start_url, logger)
 	total_successful_saves = 0
@@ -999,8 +1067,43 @@ def process_fpds_feed(start_url, logger)
 	total_successful_saves
 end
 
+# --- CLI Argument Parsing ---
+def parse_cli_options
+	options = { mode: :daily }
+
+	OptionParser.new do |opts|
+		opts.banner = "Usage: #{$0} [options]"
+
+		opts.on('--backfill', 'Download ALL historical FPDS data (day-by-day)') do
+			options[:mode] = :backfill
+		end
+
+		opts.on('--start-date DATE', 'Backfill start date (YYYY-MM-DD). Default: 2000-10-01') do |d|
+			options[:start_date] = Date.parse(d)
+		end
+
+		opts.on('--end-date DATE', 'Backfill end date (YYYY-MM-DD). Default: yesterday') do |d|
+			options[:end_date] = Date.parse(d)
+		end
+
+		opts.on('--resume', 'Resume a previously interrupted backfill from where it left off') do
+			options[:mode] = :backfill
+			options[:resume] = true
+		end
+
+		opts.on('-h', '--help', 'Show this help message') do
+			puts opts
+			exit
+		end
+	end.parse!
+
+	options
+end
+
 # --- Main Execution ---
 if __FILE__ == $0
+	options = parse_cli_options
+
 	lock_file_path = File.join(__dir__, "#{File.basename(__FILE__)}.lock")
 	lock_file      = File.open(lock_file_path, 'w')
 	unless lock_file.flock(File::LOCK_EX | File::LOCK_NB)
@@ -1011,12 +1114,37 @@ if __FILE__ == $0
 	LOG.info "Script starting up with exclusive lock."
 	current_run_start_time = Time.now
 
-	job_tracker = JobTracker.find_or_create(job_name: JOB_NAME)
-	job_tracker.update(last_attempted_run_start_time: current_run_start_time, status: 'initializing') # Initial status
+	if options[:mode] == :backfill
+		# --- Backfill Mode ---
+		backfill_start = options[:start_date] || BACKFILL_EARLIEST_DATE
+		backfill_end   = options[:end_date] || (Date.today - 1)
 
-	start_url = nil
-	begin
-		if job_tracker.status == 'failed' && job_tracker.next_page_url
+		LOG.info "=== BACKFILL MODE ==="
+		LOG.info "Downloading all FPDS records from #{backfill_start} to #{backfill_end}"
+		LOG.info "This will iterate day-by-day through #{(backfill_end - backfill_start).to_i + 1} days."
+
+		setup_database(DB, LOG)
+
+		begin
+			saved_count = backfill_fpds_feed(backfill_start, backfill_end, LOG)
+			LOG.info "Backfill completed successfully. Total records saved: #{saved_count}"
+		rescue => e
+			LOG.fatal "Backfill failed: #{e.message}"
+			LOG.fatal e.backtrace.join("\n")
+			LOG.info "Run with --resume to continue from where it left off."
+		ensure
+			lock_file.flock(File::LOCK_UN)
+			lock_file.close
+			LOG.info "Script finished and lock released."
+		end
+	else
+		# --- Daily Mode (original behavior) ---
+		job_tracker = JobTracker.find_or_create(job_name: JOB_NAME)
+		job_tracker.update(last_attempted_run_start_time: current_run_start_time, status: 'initializing') # Initial status
+
+		start_url = nil
+		begin
+			if job_tracker.status == 'failed' && job_tracker.next_page_url
 			LOG.warn "Previous run failed. Resuming from last known page: #{job_tracker.next_page_url}"
 			start_url = job_tracker.next_page_url
 			saved_count = process_fpds_feed(start_url, LOG)
@@ -1196,9 +1324,10 @@ if __FILE__ == $0
 			error_msg = e.message.length > 200 ? "#{e.message[0...197]}..." : e.message
 			job_tracker.update(status: 'failed', notes: "Run failed with error: #{error_msg} at #{Time.now}. Last URL: #{job_tracker.next_page_url}")
 		end
-	ensure
-		lock_file.flock(File::LOCK_UN)
-		lock_file.close
-		LOG.info "Script finished and lock released."
+		ensure
+			lock_file.flock(File::LOCK_UN)
+			lock_file.close
+			LOG.info "Script finished and lock released."
+		end
 	end
 end
