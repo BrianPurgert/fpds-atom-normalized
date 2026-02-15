@@ -1,0 +1,96 @@
+<div class="content-page">
+  <div class="container">
+    <h1>Data Reports</h1>
+    <p class="page-subtitle">Summary of federal procurement spending in the dataset</p>
+
+    <div class="help-card">
+      <h2>🏛️ Top 25 Agencies by Obligated Amount</h2>
+      <% if top_agencies.empty? %>
+        <p style="color:#868e96;">No agency data available.</p>
+      <% else %>
+        <table class="report-table">
+          <thead>
+            <tr>
+              <th>#</th>
+              <th>Agency</th>
+              <th>Code</th>
+              <th>Contracts</th>
+              <th>Total Obligated</th>
+            </tr>
+          </thead>
+          <tbody>
+            <% top_agencies.each_with_index do |a, i| %>
+              <tr>
+                <td><%= i + 1 %></td>
+                <td><a href="/search?agency=<%= h(a[:agency_code]) %>"><%= h(a[:agency_name] || 'Unknown') %></a></td>
+                <td><%= h(a[:agency_code] || 'N/A') %></td>
+                <td class="number"><%= a[:contract_count].to_s.reverse.gsub(/(\d{3})(?=\d)/, '\\1,').reverse %></td>
+                <td class="number"><%= a[:total_obligated] ? format_currency(a[:total_obligated]) : 'N/A' %></td>
+              </tr>
+            <% end %>
+          </tbody>
+        </table>
+      <% end %>
+    </div>
+
+    <div class="help-card">
+      <h2>🏢 Top 25 Vendors by Obligated Amount</h2>
+      <% if top_vendors.empty? %>
+        <p style="color:#868e96;">No vendor data available.</p>
+      <% else %>
+        <table class="report-table">
+          <thead>
+            <tr>
+              <th>#</th>
+              <th>Vendor</th>
+              <th>UEI</th>
+              <th>Contracts</th>
+              <th>Total Obligated</th>
+            </tr>
+          </thead>
+          <tbody>
+            <% top_vendors.each_with_index do |v, i| %>
+              <tr>
+                <td><%= i + 1 %></td>
+                <td><a href="/search?vendor_name=<%= CGI.escape(v[:vendor_name].to_s) %>"><%= h(v[:vendor_name] || 'Unknown') %></a></td>
+                <td><%= h(v[:uei_sam] || 'N/A') %></td>
+                <td class="number"><%= v[:contract_count].to_s.reverse.gsub(/(\d{3})(?=\d)/, '\\1,').reverse %></td>
+                <td class="number"><%= v[:total_obligated] ? format_currency(v[:total_obligated]) : 'N/A' %></td>
+              </tr>
+            <% end %>
+          </tbody>
+        </table>
+      <% end %>
+    </div>
+
+    <div class="help-card">
+      <h2>📋 Top 25 NAICS Codes by Obligated Amount</h2>
+      <% if top_naics.empty? %>
+        <p style="color:#868e96;">No NAICS data available.</p>
+      <% else %>
+        <table class="report-table">
+          <thead>
+            <tr>
+              <th>#</th>
+              <th>NAICS Code</th>
+              <th>Description</th>
+              <th>Contracts</th>
+              <th>Total Obligated</th>
+            </tr>
+          </thead>
+          <tbody>
+            <% top_naics.each_with_index do |n, i| %>
+              <tr>
+                <td><%= i + 1 %></td>
+                <td><a href="/search?naics=<%= h(n[:naics_code]) %>"><%= h(n[:naics_code] || 'N/A') %></a></td>
+                <td><%= h(n[:naics_description] || 'N/A') %></td>
+                <td class="number"><%= n[:contract_count].to_s.reverse.gsub(/(\d{3})(?=\d)/, '\\1,').reverse %></td>
+                <td class="number"><%= n[:total_obligated] ? format_currency(n[:total_obligated]) : 'N/A' %></td>
+              </tr>
+            <% end %>
+          </tbody>
+        </table>
+      <% end %>
+    </div>
+  </div>
+</div>

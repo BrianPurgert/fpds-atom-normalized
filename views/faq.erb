@@ -1,0 +1,127 @@
+<div class="content-page">
+  <div class="container">
+    <h1>Frequently Asked Questions</h1>
+    <p class="page-subtitle">Common questions about FPDS.me and federal procurement data</p>
+
+    <div class="accordion-item">
+      <div class="accordion-header">What is FPDS.me?</div>
+      <div class="accordion-body">
+        <p>FPDS.me is an independent, open-data preservation project that archives federal procurement data originally published through the Federal Procurement Data System (FPDS.gov) Atom feed. With FPDS.gov being decommissioned in 2026, this project ensures continued public access to historical contract award data.</p>
+      </div>
+    </div>
+
+    <div class="accordion-item">
+      <div class="accordion-header">What data is available here?</div>
+      <div class="accordion-body">
+        <p>This site contains federal contract action records including:</p>
+        <ul>
+          <li><strong>Contract Awards</strong> — Definitive contracts, purchase orders, delivery/task orders, and BPA calls</li>
+          <li><strong>IDVs (Indefinite Delivery Vehicles)</strong> — GWACs, BOAs, BPAs, IDCs, and Federal Supply Schedules</li>
+          <li><strong>Contract Modifications</strong> — Changes to existing contract actions</li>
+          <li><strong>Vendor Information</strong> — Contractor names, UEIs, addresses, and socioeconomic indicators</li>
+          <li><strong>Agency & Office Data</strong> — Contracting and funding agency/office details</li>
+          <li><strong>Competition Data</strong> — Extent competed, set-aside types, number of offers received</li>
+          <li><strong>Financial Data</strong> — Obligated amounts, base and all options values, treasury account info</li>
+        </ul>
+      </div>
+    </div>
+
+    <div class="accordion-item">
+      <div class="accordion-header">Why is FPDS.gov being decommissioned?</div>
+      <div class="accordion-body">
+        <p>The General Services Administration (GSA) is consolidating federal acquisition data systems into SAM.gov as part of a modernization effort. FPDS.gov's ezSearch was decommissioned on February 24, 2026, with the Atom feed following later in FY2026. All procurement data search capabilities are transitioning to <a href="https://sam.gov/fpds" target="_blank">SAM.gov</a>.</p>
+      </div>
+    </div>
+
+    <div class="accordion-item">
+      <div class="accordion-header">Where should I go for official data?</div>
+      <div class="accordion-body">
+        <p>For the most current and authoritative federal procurement data, use these official sources:</p>
+        <ul>
+          <li><a href="https://sam.gov/fpds" target="_blank">SAM.gov/FPDS</a> — The new official home for FPDS contract search</li>
+          <li><a href="https://open.gsa.gov/api/contract-awards/" target="_blank">SAM.gov Contract Awards API</a> — Programmatic access to contract data (replaces the FPDS Atom feed)</li>
+          <li><a href="https://usaspending.gov" target="_blank">USASpending.gov</a> — Federal spending data and analytics</li>
+        </ul>
+      </div>
+    </div>
+
+    <div class="accordion-item">
+      <div class="accordion-header">How do I search for contracts?</div>
+      <div class="accordion-body">
+        <p>Use the <a href="/search">ezSearch</a> page to find contracts. You can search by:</p>
+        <ul>
+          <li><strong>Keywords</strong> — Contract number (PIID), vendor name, agency name, description text, or solicitation ID</li>
+          <li><strong>Agency</strong> — Select a specific federal agency from the dropdown</li>
+          <li><strong>NAICS Code</strong> — North American Industry Classification System code (e.g., 541512 for Computer Systems Design)</li>
+          <li><strong>PSC Code</strong> — Product or Service Code (e.g., D306 for IT and Telecom Systems Development)</li>
+          <li><strong>Date Range</strong> — Filter by contract signed date</li>
+          <li><strong>Dollar Amount</strong> — Minimum and maximum obligated amounts</li>
+          <li><strong>State</strong> — Place of performance state code (e.g., VA, CA, TX)</li>
+          <li><strong>Vendor Name</strong> — Partial name matching for contractor search</li>
+          <li><strong>Set-Aside Type</strong> — Small business set-aside categories</li>
+        </ul>
+      </div>
+    </div>
+
+    <div class="accordion-item">
+      <div class="accordion-header">What is a PIID?</div>
+      <div class="accordion-body">
+        <p><strong>PIID</strong> stands for <strong>Procurement Instrument Identifier</strong>. It is the unique identifier assigned to each federal contract action. PIIDs follow standardized formats defined by the Federal Acquisition Regulation (FAR). You can search for a specific contract by entering its PIID in the search bar.</p>
+      </div>
+    </div>
+
+    <div class="accordion-item">
+      <div class="accordion-header">What is the difference between an Award and an IDV?</div>
+      <div class="accordion-body">
+        <p><strong>Awards</strong> are actual contract actions where the government commits to purchase goods or services. They include definitive contracts, purchase orders, delivery orders, task orders, and BPA calls.</p>
+        <p><strong>IDVs (Indefinite Delivery Vehicles)</strong> are umbrella contracts that establish terms and conditions under which future delivery orders or task orders can be placed. They include GWACs, BOAs, BPAs, IDCs, and Federal Supply Schedules.</p>
+      </div>
+    </div>
+
+    <div class="accordion-item">
+      <div class="accordion-header">What is a UEI?</div>
+      <div class="accordion-body">
+        <p><strong>UEI</strong> stands for <strong>Unique Entity Identifier</strong>. It is a 12-character alphanumeric identifier assigned through SAM.gov to entities doing business with the federal government. The UEI replaced the DUNS number in April 2022 as the standard identifier for federal contractors.</p>
+      </div>
+    </div>
+
+    <div class="accordion-item">
+      <div class="accordion-header">What are NAICS codes?</div>
+      <div class="accordion-body">
+        <p><strong>NAICS</strong> (North American Industry Classification System) codes classify businesses by industry. Common examples in federal contracting include:</p>
+        <ul>
+          <li><strong>541512</strong> — Computer Systems Design Services</li>
+          <li><strong>541330</strong> — Engineering Services</li>
+          <li><strong>561210</strong> — Facilities Support Services</li>
+          <li><strong>236220</strong> — Commercial and Institutional Building Construction</li>
+          <li><strong>541611</strong> — Administrative Management Consulting Services</li>
+        </ul>
+      </div>
+    </div>
+
+    <div class="accordion-item">
+      <div class="accordion-header">Is there an API available?</div>
+      <div class="accordion-body">
+        <p>Yes! FPDS.me provides a JSON API endpoint for programmatic access:</p>
+        <ul>
+          <li><code>GET /api/search?q=keyword&page=1&per_page=25</code></li>
+        </ul>
+        <p>The API returns JSON with contract PIID, description, obligated amount, signed date, vendor name, and agency name. See the <a href="/help#api">Help page</a> for full documentation.</p>
+      </div>
+    </div>
+
+    <div class="accordion-item">
+      <div class="accordion-header">How current is the data?</div>
+      <div class="accordion-body">
+        <p>The data was collected from the FPDS.gov Atom feed. Data freshness depends on when the ingestion scripts were last run. Check the home page for the date range of available data. For the most current data, use <a href="https://sam.gov/fpds" target="_blank">SAM.gov</a>.</p>
+      </div>
+    </div>
+
+    <div class="accordion-item">
+      <div class="accordion-header">Is this site affiliated with the U.S. government?</div>
+      <div class="accordion-body">
+        <p>No. FPDS.me is an independent, open-data preservation project. It is not affiliated with, endorsed by, or operated by the U.S. government, GSA, or any federal agency. All data was obtained from publicly available FPDS.gov Atom feeds.</p>
+      </div>
+    </div>
+  </div>
+</div>

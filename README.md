@@ -1,8 +1,8 @@
 # fpds-atom
 
-Standalone tools for ingesting federal contract data from the [FPDS.gov](https://www.fpds.gov) Atom feed into a PostgreSQL database.
+Standalone tools for ingesting and searching federal contract data from the [FPDS.gov](https://www.fpds.gov) Atom feed, stored in a PostgreSQL database with a modern web interface.
 
-This package fetches modified contract award records from the FPDS Atom feed, parses the XML entries, and loads them into a normalized PostgreSQL schema with dimension tables for vendors, agencies, offices, product/service codes, and NAICS codes.
+This package fetches modified contract award records from the FPDS Atom feed, parses the XML entries, loads them into a normalized PostgreSQL schema, and provides a web application for searching and browsing the data.
 
 ## What It Does
 
@@ -19,6 +19,7 @@ This package fetches modified contract award records from the FPDS Atom feed, pa
 - Uses content hashing for idempotency (avoids duplicate ingestion)
 - Tracks state via a `job_tracker` table (remembers last fetch date, supports resume on failure)
 - Handles missed days automatically by backfilling since the last successful run
+- **Web application** with ezSearch, contract detail views, reports, FAQ, and JSON API
 
 ## Requirements
 
@@ -46,7 +47,48 @@ Required variables:
 Alternative individual connection parameters:
 - `POSTGRES_HOST`, `POSTGRES_DATABASE`, `POSTGRES_USER`, `POSTGRES_PASSWORD`, `POSTGRES_SSLMODE`
 
-## Usage
+Optional:
+- `PORT` — Web server port (default: `4567`)
+
+## Web Application
+
+### Starting the Server
+
+```bash
+bundle exec puma config.ru -p 4567
+```
+
+Then open [http://localhost:4567](http://localhost:4567) in your browser.
+
+### Pages
+
+| Route | Description |
+|-------|-------------|
+| `/` | Home page with stats dashboard and search bar |
+| `/search` | ezSearch — keyword search with advanced filters |
+| `/contract/:id` | Contract detail view with full record |
+| `/reports` | Top agencies, vendors, and NAICS codes by spending |
+| `/faq` | Frequently asked questions about FPDS data |
+| `/help` | Help guides, glossary, and API documentation |
+| `/api/search` | JSON API endpoint for programmatic access |
+
+### ezSearch Features
+
+- **Keyword search** across PIID, vendor name, agency, office, description, solicitation ID, and IDV references
+- **Advanced filters**: agency, vendor name, NAICS code, PSC code, date range, dollar amount, state, set-aside type
+- **Paginated results** with result count and search timing
+- **Result cards** showing PIID, obligated amount, description, vendor, agency, office, NAICS, PSC, and state
+- **Contract detail** pages with 10+ sections: award ID, dollar values, contract details, dates, purchaser info, vendor info (with socioeconomic indicators), product/service, competition, place of performance, transaction info, and treasury accounts
+
+### JSON API
+
+```
+GET /api/search?q=keyword&page=1&per_page=25
+```
+
+Returns JSON with `total`, `page`, `per_page`, `total_pages`, and `results` array containing contract data.
+
+## Data Ingestion
 
 ### Daily Mode (default)
 
@@ -109,16 +151,32 @@ bundle exec rspec
 
 ```
 fpds-atom/
+├── app.rb                    # Sinatra web application
+├── config.ru                 # Rack configuration
+├── views/
+│   ├── layout.erb            # Main layout template
+│   ├── home.erb              # Home page with stats & search
+│   ├── search.erb            # ezSearch results page
+│   ├── contract_detail.erb   # Full contract record view
+│   ├── reports.erb           # Top agencies/vendors/NAICS
+│   ├── faq.erb               # Frequently asked questions
+│   ├── help.erb              # Help guides & API docs
+│   ├── not_found.erb         # 404 page
+│   └── error.erb             # Error page
+├── public/
+│   └── css/
+│       └── style.css         # Application stylesheet
 ├── scripts/
-│   └── fetch_fpds_modified_awards_normalized_v3.rb  # Main ingestion script
+│   └── fetch_fpds_modified_awards_normalized_v3.rb  # Data ingestion script
 ├── lib/
-│   ├── database.rb          # PostgreSQL connection (Sequel ORM)
-│   └── parsers.rb           # Date/datetime/float/boolean parsing utilities
+│   ├── database.rb           # PostgreSQL connection (Sequel ORM)
+│   ├── normalizer.rb         # Data normalization utilities
+│   └── parsers.rb            # Date/datetime/float/boolean parsing
 ├── spec/
 │   ├── spec_helper.rb
 │   └── parse_date_spec.rb
 ├── docs/
-│   └── atom-feed-spec.md    # FPDS Atom feed data specification
+│   └── atom-feed-spec.md     # FPDS Atom feed data specification
 ├── .github/
 │   └── workflows/
 │       └── fetch-fpds-modified-awards-v3.yml  # Daily ingestion workflow

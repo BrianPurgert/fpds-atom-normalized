@@ -1,0 +1,167 @@
+<div class="search-page">
+  <div class="container">
+    <div class="search-bar-inline">
+      <form action="/search" method="get">
+        <input type="text" name="q" value="<%= h(query) %>" placeholder="Search contracts by keyword, PIID, vendor, or agency..." autocomplete="off">
+        <button type="submit">Search</button>
+        <button type="button" class="filters-toggle" onclick="document.getElementById('filters').classList.toggle('hidden')">⚙ Filters</button>
+      </form>
+    </div>
+
+    <div id="filters" class="filters-panel <%= filters.values.all? { |v| v.empty? } ? 'hidden' : '' %>">
+      <form action="/search" method="get">
+        <input type="hidden" name="q" value="<%= h(query) %>">
+        <div class="filters-grid">
+          <div class="filter-group">
+            <label for="f-agency">Agency</label>
+            <select id="f-agency" name="agency">
+              <option value="">All Agencies</option>
+              <% agencies.each do |a| %>
+                <option value="<%= h(a[:agency_code]) %>" <%= 'selected' if filters[:agency] == a[:agency_code] %>><%= h(a[:agency_name] || a[:agency_code]) %></option>
+              <% end %>
+            </select>
+          </div>
+          <div class="filter-group">
+            <label for="f-vendor">Vendor Name</label>
+            <input type="text" id="f-vendor" name="vendor_name" value="<%= h(filters[:vendor_name]) %>" placeholder="e.g. Lockheed Martin">
+          </div>
+          <div class="filter-group">
+            <label for="f-naics">NAICS Code</label>
+            <input type="text" id="f-naics" name="naics" value="<%= h(filters[:naics]) %>" placeholder="e.g. 541512">
+          </div>
+          <div class="filter-group">
+            <label for="f-psc">PSC Code</label>
+            <input type="text" id="f-psc" name="psc" value="<%= h(filters[:psc]) %>" placeholder="e.g. D306">
+          </div>
+          <div class="filter-group">
+            <label for="f-date-from">Date Signed (From)</label>
+            <input type="date" id="f-date-from" name="date_from" value="<%= h(filters[:date_from]) %>">
+          </div>
+          <div class="filter-group">
+            <label for="f-date-to">Date Signed (To)</label>
+            <input type="date" id="f-date-to" name="date_to" value="<%= h(filters[:date_to]) %>">
+          </div>
+          <div class="filter-group">
+            <label for="f-amount-min">Min Obligated ($)</label>
+            <input type="number" id="f-amount-min" name="amount_min" value="<%= h(filters[:amount_min]) %>" placeholder="0" step="any">
+          </div>
+          <div class="filter-group">
+            <label for="f-amount-max">Max Obligated ($)</label>
+            <input type="number" id="f-amount-max" name="amount_max" value="<%= h(filters[:amount_max]) %>" placeholder="999999999" step="any">
+          </div>
+          <div class="filter-group">
+            <label for="f-state">State (POP)</label>
+            <input type="text" id="f-state" name="state" value="<%= h(filters[:state]) %>" placeholder="e.g. VA" maxlength="2">
+          </div>
+          <div class="filter-group">
+            <label for="f-set-aside">Set-Aside Type</label>
+            <input type="text" id="f-set-aside" name="set_aside" value="<%= h(filters[:set_aside]) %>" placeholder="e.g. SBA">
+          </div>
+        </div>
+        <div class="filter-actions">
+          <button type="submit" class="btn-primary">Apply Filters</button>
+          <a href="/search<%= query.empty? ? '' : "?q=#{CGI.escape(query)}" %>" class="btn-secondary" style="text-decoration:none;display:inline-block;">Clear Filters</a>
+        </div>
+      </form>
+    </div>
+
+    <% if has_search %>
+      <div class="results-header">
+        <div class="results-count">
+          <% if total > 0 %>
+            Showing <strong><%= ((page - 1) * per_page) + 1 %>–<%= [page * per_page, total].min %></strong> of <strong><%= total.to_s.reverse.gsub(/(\d{3})(?=\d)/, '\\1,').reverse %></strong> results
+          <% else %>
+            <strong>0</strong> results
+          <% end %>
+          <% unless query.empty? %>for "<strong><%= h(query) %></strong>"<% end %>
+        </div>
+        <div class="results-time"><%= search_time %>ms</div>
+      </div>
+
+      <% if results.empty? %>
+        <div class="no-results">
+          <h3>No contracts found</h3>
+          <p>Try adjusting your search terms or filters. Use broader keywords or remove some filter criteria.</p>
+        </div>
+      <% else %>
+        <% results.each do |r| %>
+          <div class="result-card">
+            <div class="result-title">
+              <a href="/contract/<%= r[:id] %>">
+                <%= h(r[:piid]) %>
+                <% if r[:modification_number] && r[:modification_number] != '0' %>
+                  <span class="tag tag-gold">Mod <%= h(r[:modification_number]) %></span>
+                <% end %>
+                <% if r[:referenced_idv_piid] %>
+                  <span class="tag tag-blue">IDV: <%= h(r[:referenced_idv_piid]) %></span>
+                <% end %>
+              </a>
+              <% if r[:obligated_amount] %>
+                <div class="result-amount <%= r[:obligated_amount] < 0 ? 'negative' : '' %>"><%= format_currency(r[:obligated_amount]) %></div>
+              <% end %>
+            </div>
+            <% if r[:description_of_requirement] %>
+              <div class="result-description"><%= h(truncate(r[:description_of_requirement], 200)) %></div>
+            <% end %>
+            <div class="result-meta">
+              <% if r[:vendor_name] %>
+                <div class="meta-item"><span class="meta-label">Vendor:</span> <%= h(r[:vendor_name]) %></div>
+              <% end %>
+              <% if r[:agency_name] %>
+                <div class="meta-item"><span class="meta-label">Agency:</span> <%= h(r[:agency_name]) %></div>
+              <% end %>
+              <% if r[:office_name] %>
+                <div class="meta-item"><span class="meta-label">Office:</span> <%= h(r[:office_name]) %></div>
+              <% end %>
+              <% if r[:signed_date] %>
+                <div class="meta-item"><span class="meta-label">Signed:</span> <%= format_date(r[:signed_date]) %></div>
+              <% end %>
+              <% if r[:naics_code_val] %>
+                <div class="meta-item"><span class="meta-label">NAICS:</span> <%= h(r[:naics_code_val]) %></div>
+              <% end %>
+              <% if r[:psc_code_val] %>
+                <div class="meta-item"><span class="meta-label">PSC:</span> <%= h(r[:psc_code_val]) %></div>
+              <% end %>
+              <% if r[:pop_state_code] %>
+                <div class="meta-item"><span class="meta-label">State:</span> <%= h(r[:pop_state_code]) %></div>
+              <% end %>
+            </div>
+          </div>
+        <% end %>
+
+        <% if total_pages > 1 %>
+          <div class="pagination">
+            <% if page > 1 %>
+              <a href="/search?<%= build_search_qs(page - 1, query, per_page, filters) %>">← Prev</a>
+            <% end %>
+            <% if page > 4 %>
+              <a href="/search?<%= build_search_qs(1, query, per_page, filters) %>">1</a>
+              <span class="dots">…</span>
+            <% end %>
+            <% page_range(page, total_pages).each do |p| %>
+              <% if p == page %>
+                <span class="current"><%= p %></span>
+              <% else %>
+                <a href="/search?<%= build_search_qs(p, query, per_page, filters) %>"><%= p %></a>
+              <% end %>
+            <% end %>
+            <% if page < total_pages - 3 %>
+              <span class="dots">…</span>
+              <a href="/search?<%= build_search_qs(total_pages, query, per_page, filters) %>"><%= total_pages %></a>
+            <% end %>
+            <% if page < total_pages %>
+              <a href="/search?<%= build_search_qs(page + 1, query, per_page, filters) %>">Next →</a>
+            <% end %>
+          </div>
+        <% end %>
+      <% end %>
+    <% else %>
+      <div class="empty-state">
+        <div class="empty-icon">🔍</div>
+        <h3>Search Federal Contract Awards</h3>
+        <p>Enter a keyword above or use the filters to find federal procurement data.<br>
+        Search by PIID, vendor name, agency, description, solicitation ID, and more.</p>
+      </div>
+    <% end %>
+  </div>
+</div>

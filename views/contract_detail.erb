@@ -1,0 +1,391 @@
+<div class="detail-page">
+  <div class="container">
+    <a href="javascript:history.back()" class="back-link">← Back to results</a>
+
+    <div class="detail-header">
+      <h1>Contract <%= h(contract[:piid]) %>
+        <% if contract[:modification_number] && contract[:modification_number] != '0' %>
+          — Mod <%= h(contract[:modification_number]) %>
+        <% end %>
+      </h1>
+      <div class="detail-subtitle">
+        <%= h(contract[:action_type_description] || contract[:record_type] || 'Contract Action') %>
+        <% if contract[:signed_date] %> · Signed <%= format_date(contract[:signed_date]) %><% end %>
+        <% if contract[:agency_name] %> · <%= h(contract[:agency_name]) %><% end %>
+      </div>
+    </div>
+
+    <div class="detail-body">
+      <!-- Award Identification -->
+      <div class="detail-section">
+        <h2>Award Identification</h2>
+        <div class="detail-grid">
+          <div class="detail-field">
+            <div class="field-label">PIID</div>
+            <div class="field-value"><%= h(contract[:piid]) %></div>
+          </div>
+          <div class="detail-field">
+            <div class="field-label">Modification Number</div>
+            <div class="field-value"><%= h(contract[:modification_number] || '0') %></div>
+          </div>
+          <div class="detail-field">
+            <div class="field-label">Referenced IDV PIID</div>
+            <div class="field-value"><%= h(contract[:referenced_idv_piid] || 'N/A') %></div>
+          </div>
+          <div class="detail-field">
+            <div class="field-label">Transaction Number</div>
+            <div class="field-value"><%= h(contract[:transaction_number] || 'N/A') %></div>
+          </div>
+          <div class="detail-field">
+            <div class="field-label">Solicitation ID</div>
+            <div class="field-value"><%= h(contract[:solicitation_id] || 'N/A') %></div>
+          </div>
+          <div class="detail-field">
+            <div class="field-label">Record Type</div>
+            <div class="field-value"><%= h(contract[:record_type] || 'N/A') %></div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Dollar Values -->
+      <div class="detail-section">
+        <h2>Dollar Values</h2>
+        <div class="detail-grid">
+          <div class="detail-field">
+            <div class="field-label">Obligated Amount</div>
+            <div class="field-value amount"><%= contract[:obligated_amount] ? format_currency(contract[:obligated_amount]) : 'N/A' %></div>
+          </div>
+          <div class="detail-field">
+            <div class="field-label">Base and All Options Value</div>
+            <div class="field-value amount"><%= contract[:base_and_all_options_value] ? format_currency(contract[:base_and_all_options_value]) : 'N/A' %></div>
+          </div>
+          <div class="detail-field">
+            <div class="field-label">Base and Exercised Options</div>
+            <div class="field-value"><%= contract[:base_and_exercised_options_value] ? format_currency(contract[:base_and_exercised_options_value]) : 'N/A' %></div>
+          </div>
+          <div class="detail-field">
+            <div class="field-label">Total Obligated Amount</div>
+            <div class="field-value"><%= contract[:total_obligated_amount] ? format_currency(contract[:total_obligated_amount]) : 'N/A' %></div>
+          </div>
+          <div class="detail-field">
+            <div class="field-label">Total Estimated Order Value</div>
+            <div class="field-value"><%= contract[:total_estimated_order_value] ? format_currency(contract[:total_estimated_order_value]) : 'N/A' %></div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Contract Details -->
+      <div class="detail-section">
+        <h2>Contract Details</h2>
+        <div class="detail-grid">
+          <div class="detail-field">
+            <div class="field-label">Action Type</div>
+            <div class="field-value"><%= h(contract[:action_type_description] || contract[:action_type_code] || 'N/A') %></div>
+          </div>
+          <div class="detail-field">
+            <div class="field-label">Contract Pricing Type</div>
+            <div class="field-value"><%= h(contract[:pricing_type_description] || contract[:pricing_type_code] || 'N/A') %></div>
+          </div>
+          <div class="detail-field">
+            <div class="field-label">Reason for Modification</div>
+            <div class="field-value"><%= h(contract[:reason_for_modification] || 'N/A') %></div>
+          </div>
+          <div class="detail-field">
+            <div class="field-label">Major Program Code</div>
+            <div class="field-value"><%= h(contract[:major_program_code] || 'N/A') %></div>
+          </div>
+          <div class="detail-field">
+            <div class="field-label">National Interest Action</div>
+            <div class="field-value"><%= h(contract[:national_interest_action_code] || 'N/A') %></div>
+          </div>
+          <div class="detail-field">
+            <div class="field-label">Multi-Year Contract</div>
+            <div class="field-value"><%= h(contract[:multi_year_contract] || 'N/A') %></div>
+          </div>
+          <div class="detail-field">
+            <div class="field-label">Consolidated Contract</div>
+            <div class="field-value"><%= h(contract[:consolidated_contract] || 'N/A') %></div>
+          </div>
+          <div class="detail-field">
+            <div class="field-label">Performance-Based Service Contract</div>
+            <div class="field-value"><%= h(contract[:performance_based_service_contract] || 'N/A') %></div>
+          </div>
+        </div>
+        <% if contract[:description_of_requirement] %>
+          <div style="margin-top:16px;">
+            <div class="field-label">Description of Requirement</div>
+            <div class="field-value" style="margin-top:4px;line-height:1.7;"><%= h(contract[:description_of_requirement]) %></div>
+          </div>
+        <% end %>
+      </div>
+
+      <!-- Dates -->
+      <div class="detail-section">
+        <h2>Key Dates</h2>
+        <div class="detail-grid">
+          <div class="detail-field">
+            <div class="field-label">Date Signed</div>
+            <div class="field-value"><%= contract[:signed_date] ? format_date(contract[:signed_date]) : 'N/A' %></div>
+          </div>
+          <div class="detail-field">
+            <div class="field-label">Effective Date</div>
+            <div class="field-value"><%= contract[:effective_date] ? format_datetime(contract[:effective_date]) : 'N/A' %></div>
+          </div>
+          <div class="detail-field">
+            <div class="field-label">Current Completion Date</div>
+            <div class="field-value"><%= contract[:current_completion_date] ? format_date(contract[:current_completion_date]) : 'N/A' %></div>
+          </div>
+          <div class="detail-field">
+            <div class="field-label">Ultimate Completion Date</div>
+            <div class="field-value"><%= contract[:ultimate_completion_date] ? format_date(contract[:ultimate_completion_date]) : 'N/A' %></div>
+          </div>
+          <div class="detail-field">
+            <div class="field-label">Last Date to Order</div>
+            <div class="field-value"><%= contract[:last_date_to_order] ? format_date(contract[:last_date_to_order]) : 'N/A' %></div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Purchaser Information -->
+      <div class="detail-section">
+        <h2>Purchaser Information</h2>
+        <div class="detail-grid">
+          <div class="detail-field">
+            <div class="field-label">Contracting Agency</div>
+            <div class="field-value"><%= h(contract[:agency_name] || 'N/A') %> <% if contract[:agency_code_val] %><span class="tag tag-blue"><%= h(contract[:agency_code_val]) %></span><% end %></div>
+          </div>
+          <div class="detail-field">
+            <div class="field-label">Contracting Office</div>
+            <div class="field-value"><%= h(contract[:contracting_office_name] || 'N/A') %> <% if contract[:contracting_office_code] %><span class="tag tag-blue"><%= h(contract[:contracting_office_code]) %></span><% end %></div>
+          </div>
+          <div class="detail-field">
+            <div class="field-label">Funding Agency</div>
+            <div class="field-value"><%= h(contract[:funding_agency_name] || 'N/A') %> <% if contract[:funding_agency_code] %><span class="tag tag-blue"><%= h(contract[:funding_agency_code]) %></span><% end %></div>
+          </div>
+          <div class="detail-field">
+            <div class="field-label">Funding Office</div>
+            <div class="field-value"><%= h(contract[:funding_office_name] || 'N/A') %> <% if contract[:funding_office_code] %><span class="tag tag-blue"><%= h(contract[:funding_office_code]) %></span><% end %></div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Vendor Information -->
+      <div class="detail-section">
+        <h2>Vendor Information</h2>
+        <div class="detail-grid">
+          <div class="detail-field">
+            <div class="field-label">Vendor Name</div>
+            <div class="field-value"><%= h(contract[:vendor_name] || 'N/A') %></div>
+          </div>
+          <div class="detail-field">
+            <div class="field-label">UEI (SAM)</div>
+            <div class="field-value"><%= h(contract[:vendor_uei] || 'N/A') %></div>
+          </div>
+          <% if vendor_detail %>
+            <div class="detail-field">
+              <div class="field-label">CAGE Code</div>
+              <div class="field-value"><%= h(vendor_detail[:cage_code] || 'N/A') %></div>
+            </div>
+            <div class="detail-field">
+              <div class="field-label">Vendor Address</div>
+              <div class="field-value">
+                <%= h(vendor_detail[:street_address] || '') %><br>
+                <%= h(vendor_detail[:city] || '') %>, <%= h(vendor_detail[:state] || '') %> <%= h(vendor_detail[:zip_code] || '') %><br>
+                <%= h(vendor_detail[:country_code] || '') %>
+              </div>
+            </div>
+            <div class="detail-field">
+              <div class="field-label">Phone</div>
+              <div class="field-value"><%= h(vendor_detail[:phone_no] || 'N/A') %></div>
+            </div>
+            <div class="detail-field">
+              <div class="field-label">Congressional District</div>
+              <div class="field-value"><%= h(vendor_detail[:congressional_district] || 'N/A') %></div>
+            </div>
+          <% end %>
+        </div>
+        <% if vendor_detail %>
+          <div style="margin-top:16px;">
+            <div class="field-label">Socioeconomic Indicators</div>
+            <div style="margin-top:8px;display:flex;flex-wrap:wrap;gap:6px;">
+              <% [
+                [:is_small_business, 'Small Business'],
+                [:is_women_owned, 'Women-Owned'],
+                [:is_veteran_owned, 'Veteran-Owned'],
+                [:is_service_related_disabled_veteran_owned_business, 'SDVOSB'],
+                [:is_minority_owned, 'Minority-Owned'],
+                [:is_sba_certified_8a_program_participant, 'SBA 8(a)'],
+                [:is_sba_certified_hubzone, 'HUBZone'],
+                [:is_alaskan_native_owned_corporation_or_firm, 'Alaska Native'],
+                [:is_american_indian_owned, 'American Indian Owned'],
+                [:is_native_hawaiian_owned_organization_or_firm, 'Native Hawaiian'],
+                [:is_economically_disadvantaged_women_owned_small_business, 'EDWOSB'],
+                [:is_for_profit_organization, 'For-Profit'],
+                [:is_nonprofit_organization, 'Nonprofit'],
+                [:is_federal_government, 'Federal Government'],
+                [:is_state_government, 'State Government'],
+                [:is_local_government, 'Local Government'],
+              ].each do |field, label| %>
+                <% if vendor_detail[field] %>
+                  <span class="tag tag-green"><%= label %></span>
+                <% end %>
+              <% end %>
+            </div>
+          </div>
+        <% end %>
+      </div>
+
+      <!-- Product/Service & NAICS -->
+      <div class="detail-section">
+        <h2>Product/Service Information</h2>
+        <div class="detail-grid">
+          <div class="detail-field">
+            <div class="field-label">PSC Code</div>
+            <div class="field-value"><%= h(contract[:psc_code_val] || 'N/A') %> <% if contract[:psc_description] %>— <%= h(contract[:psc_description]) %><% end %></div>
+          </div>
+          <div class="detail-field">
+            <div class="field-label">NAICS Code</div>
+            <div class="field-value"><%= h(contract[:naics_code_val] || 'N/A') %> <% if contract[:naics_description] %>— <%= h(contract[:naics_description]) %><% end %></div>
+          </div>
+          <div class="detail-field">
+            <div class="field-label">Contract Bundling</div>
+            <div class="field-value"><%= h(contract[:contract_bundling] || 'N/A') %></div>
+          </div>
+          <div class="detail-field">
+            <div class="field-label">Country of Origin</div>
+            <div class="field-value"><%= h(contract[:country_of_origin] || 'N/A') %></div>
+          </div>
+          <div class="detail-field">
+            <div class="field-label">Place of Manufacture</div>
+            <div class="field-value"><%= h(contract[:place_of_manufacture] || 'N/A') %></div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Competition -->
+      <div class="detail-section">
+        <h2>Competition</h2>
+        <div class="detail-grid">
+          <div class="detail-field">
+            <div class="field-label">Extent Competed</div>
+            <div class="field-value"><%= h(contract[:extent_competed] || 'N/A') %></div>
+          </div>
+          <div class="detail-field">
+            <div class="field-label">Solicitation Procedures</div>
+            <div class="field-value"><%= h(contract[:solicitation_procedures] || 'N/A') %></div>
+          </div>
+          <div class="detail-field">
+            <div class="field-label">Type of Set-Aside</div>
+            <div class="field-value"><%= h(contract[:type_of_set_aside] || 'N/A') %></div>
+          </div>
+          <div class="detail-field">
+            <div class="field-label">Number of Offers Received</div>
+            <div class="field-value"><%= contract[:number_of_offers_received] || 'N/A' %></div>
+          </div>
+          <div class="detail-field">
+            <div class="field-label">Reason Not Competed</div>
+            <div class="field-value"><%= h(contract[:reason_not_competed] || 'N/A') %></div>
+          </div>
+          <div class="detail-field">
+            <div class="field-label">Competitive Procedures</div>
+            <div class="field-value"><%= h(contract[:competitive_procedures] || 'N/A') %></div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Place of Performance -->
+      <div class="detail-section">
+        <h2>Place of Performance</h2>
+        <div class="detail-grid">
+          <div class="detail-field">
+            <div class="field-label">Street Address</div>
+            <div class="field-value"><%= h(contract[:pop_street_address] || 'N/A') %></div>
+          </div>
+          <div class="detail-field">
+            <div class="field-label">City</div>
+            <div class="field-value"><%= h(contract[:pop_city] || 'N/A') %></div>
+          </div>
+          <div class="detail-field">
+            <div class="field-label">State</div>
+            <div class="field-value"><%= h(contract[:pop_state_code] || 'N/A') %></div>
+          </div>
+          <div class="detail-field">
+            <div class="field-label">ZIP Code</div>
+            <div class="field-value"><%= h(contract[:pop_zip_code] || 'N/A') %></div>
+          </div>
+          <div class="detail-field">
+            <div class="field-label">Country</div>
+            <div class="field-value"><%= h(contract[:pop_country_code] || 'N/A') %></div>
+          </div>
+          <div class="detail-field">
+            <div class="field-label">Congressional District</div>
+            <div class="field-value"><%= h(contract[:pop_congressional_district] || 'N/A') %></div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Transaction Information -->
+      <div class="detail-section">
+        <h2>Transaction Information</h2>
+        <div class="detail-grid">
+          <div class="detail-field">
+            <div class="field-label">Status</div>
+            <div class="field-value"><%= h(contract[:transaction_status] || 'N/A') %></div>
+          </div>
+          <div class="detail-field">
+            <div class="field-label">Created By</div>
+            <div class="field-value"><%= h(contract[:created_by] || 'N/A') %></div>
+          </div>
+          <div class="detail-field">
+            <div class="field-label">Created Date</div>
+            <div class="field-value"><%= contract[:created_date] ? format_datetime(contract[:created_date]) : 'N/A' %></div>
+          </div>
+          <div class="detail-field">
+            <div class="field-label">Last Modified By</div>
+            <div class="field-value"><%= h(contract[:last_modified_by] || 'N/A') %></div>
+          </div>
+          <div class="detail-field">
+            <div class="field-label">FPDS Last Modified</div>
+            <div class="field-value"><%= contract[:fpds_last_modified_date] ? format_datetime(contract[:fpds_last_modified_date]) : 'N/A' %></div>
+          </div>
+          <div class="detail-field">
+            <div class="field-label">Approved By</div>
+            <div class="field-value"><%= h(contract[:approved_by] || 'N/A') %></div>
+          </div>
+          <div class="detail-field">
+            <div class="field-label">Approved Date</div>
+            <div class="field-value"><%= contract[:approved_date] ? format_datetime(contract[:approved_date]) : 'N/A' %></div>
+          </div>
+        </div>
+      </div>
+
+      <% if !treasury_accounts.empty? %>
+      <div class="detail-section">
+        <h2>Treasury Accounts</h2>
+        <table class="report-table">
+          <thead>
+            <tr>
+              <th>Agency ID</th>
+              <th>Main Account</th>
+              <th>Sub Account</th>
+              <th>Initiative</th>
+              <th>Obligated Amount</th>
+            </tr>
+          </thead>
+          <tbody>
+            <% treasury_accounts.each do |ta| %>
+              <tr>
+                <td><%= h(ta[:agency_identifier] || 'N/A') %></td>
+                <td><%= h(ta[:main_account_code] || 'N/A') %></td>
+                <td><%= h(ta[:sub_account_code] || 'N/A') %></td>
+                <td><%= h(ta[:initiative] || 'N/A') %></td>
+                <td class="number"><%= ta[:obligated_amount] ? format_currency(ta[:obligated_amount]) : 'N/A' %></td>
+              </tr>
+            <% end %>
+          </tbody>
+        </table>
+      </div>
+      <% end %>
+    </div>
+  </div>
+</div>

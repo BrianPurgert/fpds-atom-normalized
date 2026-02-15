@@ -1,0 +1,83 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>FPDS.me — Federal Procurement Data System</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="/css/style.css">
+</head>
+<body>
+  <div class="usa-banner">
+    <div class="container">
+      <span class="flag">🇺🇸</span>
+      Federal procurement data sourced from FPDS.gov — An open data preservation project
+    </div>
+  </div>
+
+  <header>
+    <div class="container">
+      <a href="/" class="logo">
+        <div class="logo-icon">F</div>
+        <div>
+          <div class="logo-text">FPDS<span>.me</span></div>
+          <div class="logo-sub">Federal Procurement Data</div>
+        </div>
+      </a>
+      <nav>
+        <a href="/">Home</a>
+        <a href="/search">ezSearch</a>
+        <a href="/reports">Reports</a>
+        <a href="/faq">FAQ</a>
+        <a href="/help">Help</a>
+      </nav>
+    </div>
+  </header>
+
+  <%= yield %>
+
+  <footer>
+    <div class="container">
+      <div class="footer-grid">
+        <div class="footer-col">
+          <h3>About</h3>
+          <a href="/faq">Frequently Asked Questions</a>
+          <a href="/help">Help & Guides</a>
+          <a href="/reports">Data Reports</a>
+        </div>
+        <div class="footer-col">
+          <h3>Search</h3>
+          <a href="/search">ezSearch Contracts</a>
+          <a href="/search?q=">Browse All Awards</a>
+          <a href="/api/search?q=&per_page=10">JSON API</a>
+        </div>
+        <div class="footer-col">
+          <h3>Official Sources</h3>
+          <a href="https://sam.gov/fpds" target="_blank">SAM.gov/FPDS ↗</a>
+          <a href="https://www.fpds.gov" target="_blank">FPDS.gov (Legacy) ↗</a>
+          <a href="https://open.gsa.gov/api/contract-awards/" target="_blank">SAM.gov Contract Awards API ↗</a>
+          <a href="https://usaspending.gov" target="_blank">USASpending.gov ↗</a>
+        </div>
+        <div class="footer-col">
+          <h3>Data</h3>
+          <p style="font-size:0.85rem;opacity:0.6;">Data sourced from the FPDS Atom feed. This is an independent open-data preservation project and is not affiliated with or endorsed by the U.S. government.</p>
+        </div>
+      </div>
+      <div class="footer-bottom">
+        FPDS.me — Federal Procurement Data Preservation Project · Data sourced from FPDS.gov Atom Feed
+      </div>
+    </div>
+  </footer>
+
+  <script>
+    // Accordion toggle
+    document.addEventListener('click', function(e) {
+      var header = e.target.closest('.accordion-header');
+      if (header) {
+        header.parentElement.classList.toggle('open');
+      }
+    });
+  </script>
+</body>
+</html>
