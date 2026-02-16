@@ -11,9 +11,3 @@ gem 'fiddle'
 gem 'nori'
 gem 'addressable'
 gem 'rspec'
-
-# Web application
-gem 'sinatra'
-gem 'sinatra-contrib'
-gem 'puma'
-gem 'rack'

@@ -1,0 +1,252 @@
+@import 'tailwindcss';
+
+/* === FPDS ezSearch Classic Style === */
+
+body {
+  margin: 4px 6px;
+  /*background-color: #f0f0f0;*/
+  background-color:transparent;background-image: url('04gray_gray.gif');
+  font-family: arial, sans-serif;
+  font-size: 90%;
+  color: #000;
+}
+
+a { color: #0000ff; }
+a:visited { color: #0000ff; }
+
+/* Header */
+.fpds-page { min-height: 100vh; display: flex; flex-direction: column; }
+
+.fpds-topbar {
+  background: #0558a5;
+  border-bottom: 2px solid #03407a;
+  padding: 6px 10px;
+}
+
+.fpds-header-table { width: 100%; border-collapse: collapse; }
+.fpds-header-logo { width: 60px; vertical-align: middle; }
+
+.fpds-logo-text {
+  display: inline-block;
+  background: #fff;
+  color: #0558a5;
+  font-weight: bold;
+  font-size: 14pt;
+  padding: 2px 8px;
+  border: 1px solid #fff;
+  font-family: arial, sans-serif;
+  text-decoration: none;
+}
+
+.fpds-header-logo a { text-decoration: none; }
+
+.fpds-header-title { vertical-align: middle; padding-left: 8px; }
+
+.fpds-title-link {
+  color: #fff !important;
+  font-size: 11pt;
+  font-weight: bold;
+  text-decoration: none;
+  font-family: arial, sans-serif;
+}
+
+.fpds-header-right {
+  text-align: right;
+  vertical-align: middle;
+}
+
+.fpds-subtitle {
+  color: #b0d0ff;
+  font-size: 7.5pt;
+  font-family: arial, sans-serif;
+}
+
+/* Footer */
+.fpds-footer {
+  background: #e8e8e8;
+  border-top: 1px solid #ccc;
+  padding: 6px;
+  margin-top: auto;
+}
+
+/* FPDS Box Styles (matching original) */
+.box {
+  width: 100%;
+  border: 2px solid #0558a5;
+  border-collapse: collapse;
+}
+
+.box th {
+  text-align: left;
+  font-weight: bold;
+  background: #d2e4fc;
+  border-bottom: 1px solid #d2e4fc;
+}
+
+.box-heading {
+  background: #0558a5;
+  color: #fff;
+  font-size: 10pt;
+  font-weight: bold;
+  padding: 4px 8px;
+  font-family: arial, sans-serif;
+}
+
+/* Search area */
+.search_heading {
+  font-size: 10pt;
+  font-family: arial, sans-serif;
+  color: #000;
+}
+
+/* Results */
+.resultbox {
+  width: 100%;
+  border: 1px solid #0558a5;
+  border-collapse: collapse;
+}
+
+.resultbox1 {
+  width: 100%;
+  border: 1px solid gray;
+  border-collapse: collapse;
+  background-color: #ddd;
+}
+
+.resultbox2 {
+  width: 100%;
+  border: 1px solid gray;
+  border-collapse: collapse;
+  background-color: #fff;
+}
+
+.results_title_text {
+  font-weight: bold;
+  font-size: 8pt;
+  font-family: arial, sans-serif;
+  color: #000;
+  text-align: left;
+}
+
+.results_text {
+  font-size: 8pt;
+  font-family: arial, sans-serif;
+  color: #000;
+  text-align: left;
+}
+
+.results_heading {
+  font-size: 10pt;
+  font-family: arial, sans-serif;
+  color: #fff;
+  text-align: left;
+}
+
+.help_text {
+  font-size: 7.5pt;
+  font-family: arial, sans-serif;
+  color: #000;
+}
+
+.link_text {
+  font-size: 9pt;
+  font-family: arial, sans-serif;
+}
+
+.warning_text {
+  font-weight: bold;
+  font-size: 10pt;
+  font-family: arial, sans-serif;
+  color: #000;
+}
+
+/* Filter panel */
+.filter-box {
+  border: 2px solid #0558a5;
+  border-collapse: collapse;
+  margin: 6px 0;
+  width: 100%;
+}
+
+.filter-box td {
+  padding: 3px 6px;
+  font-size: 8pt;
+  font-family: arial, sans-serif;
+  vertical-align: middle;
+}
+
+.filter-box label {
+  font-weight: bold;
+  font-size: 8pt;
+  white-space: nowrap;
+}
+
+.filter-box input[type="text"],
+.filter-box input[type="number"],
+.filter-box input[type="date"],
+.filter-box select {
+  font-size: 8pt;
+  font-family: arial, sans-serif;
+  padding: 2px 4px;
+  border: 1px solid #999;
+}
+
+/* Pagination */
+.paging-row {
+  padding: 4px 8px;
+  font-size: 8pt;
+  font-family: arial, sans-serif;
+  background: #d2e4fc;
+  border: 1px solid #0558a5;
+}
+
+.paging-row a,
+.paging-row span {
+  margin: 0 2px;
+}
+
+.page-current {
+  font-weight: bold;
+  color: #000;
+  text-decoration: none;
+}
+
+/* Go button matching FPDS style */
+.go-btn {
+  background: #0558a5;
+  color: #fff;
+  border: 1px solid #03407a;
+  padding: 3px 14px;
+  font-size: 9pt;
+  font-weight: bold;
+  cursor: pointer;
+  font-family: arial, sans-serif;
+}
+
+.go-btn:hover { background: #03407a; }
+
+.clear-btn {
+  background: #e8e8e8;
+  color: #000;
+  border: 1px solid #999;
+  padding: 3px 10px;
+  font-size: 8pt;
+  cursor: pointer;
+  font-family: arial, sans-serif;
+}
+
+.clear-btn:hover { background: #d0d0d0; }
+
+/* SVG icon styles */
+.icon {
+  display: inline-block;
+  width: 14px;
+  height: 14px;
+  vertical-align: middle;
+  margin-right: 3px;
+}
+
+/* Contract detail expand/collapse */
+.result-detail-row td {
+  padding: 2px 8px;
+}
