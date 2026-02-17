@@ -5,7 +5,10 @@
   "scripts": {
     "dev": "bunx vite dev",
     "build": "bunx vite build",
-    "start": "node .output/server/index.mjs"
+    "build:cf": "bunx vite build && node_modules/.bin/esbuild cf-entry.js --bundle --format=esm --platform=browser --main-fields=module,main --outfile=dist/client/_worker.js --conditions=workerd,worker,import,module \"--external:node:*\"",
+    "deploy": "npm run build:cf && node_modules/.bin/wrangler pages deploy dist/client",
+    "preview:cf": "npm run build:cf && node_modules/.bin/wrangler pages dev dist/client",
+    "start": "node dist/server/server.js"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.95.3",
@@ -23,6 +26,7 @@
     "tailwindcss": "^4.1.18",
     "typescript": "^5.9.3",
     "vite": "^7.3.1",
-    "vite-tsconfig-paths": "^6.1.1"
+    "vite-tsconfig-paths": "^6.1.1",
+    "wrangler": "^4.66.0"
   }
 }

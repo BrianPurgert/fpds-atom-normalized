@@ -6,3 +6,4 @@ node_modules/
 *.iml
 vendor/
 .bundle/
+/web/dist/
