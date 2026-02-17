@@ -76,9 +76,21 @@ bundle exec ruby scripts/fetch_fpds_modified_awards_normalized_v3.rb --backfill 
 bundle exec ruby scripts/fetch_fpds_modified_awards_normalized_v3.rb --resume
 ```
 
-Backfill mode iterates day-by-day through the date range, querying the feed with closed date ranges (`LAST_MOD_DATE:[date,date]`) and paginating through all results for each day. Progress is tracked in the `job_tracker` table, so interrupted runs can be resumed with `--resume`.
+Backfill mode iterates day-by-day through the date range, querying the feed with closed date ranges (`LAST_MOD_DATE:[date,date]`) and paginating through all results for each day. **Multiple days are processed concurrently** using a thread pool (default: 4 threads) for significantly faster throughput.
+
+Progress is tracked in the `job_tracker` table, so interrupted runs can be resumed with `--resume`. Days that fail are recorded and can be retried on the next run.
 
 Existing records are automatically skipped via content-hash deduplication, so it is safe to re-run overlapping date ranges.
+
+```bash
+# Use 8 threads for faster backfill
+bundle exec ruby scripts/fetch_fpds_modified_awards_normalized_v3.rb --backfill --threads 8
+
+# Backfill a specific range with 6 threads
+bundle exec ruby scripts/fetch_fpds_modified_awards_normalized_v3.rb --backfill --start-date 2015-01-01 --end-date 2020-12-31 --threads 6
+```
+
+The database connection pool is automatically sized to match the thread count. Higher thread counts increase throughput but also increase load on FPDS.gov servers; 4-8 threads is recommended.
 
 #### Options
 
@@ -87,6 +99,7 @@ Existing records are automatically skipped via content-hash deduplication, so it
 | `--backfill` | Enable backfill mode (iterate day-by-day) |
 | `--start-date YYYY-MM-DD` | Start date for backfill (default: `2000-10-01`) |
 | `--end-date YYYY-MM-DD` | End date for backfill (default: yesterday) |
+| `--threads N` | Number of concurrent threads for backfill (default: `4`) |
 | `--resume` | Resume a previously interrupted backfill |
 | `-h`, `--help` | Show help message |
 

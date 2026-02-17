@@ -12,11 +12,11 @@ rescue => _
 end
 
 module Database
-  def self.connect(logger: Logger.new($stdout))
+  def self.connect(logger: Logger.new($stdout), max_connections: 4)
     Dotenv.load
     begin
       db = if ENV['POSTGRES_URL']
-              Sequel.connect(ENV['POSTGRES_URL'])
+              Sequel.connect(ENV['POSTGRES_URL'], max_connections: max_connections)
             else
               Sequel.connect(
                 adapter:  'postgres',
@@ -24,11 +24,12 @@ module Database
                 database: ENV['POSTGRES_DATABASE'] || 'fpds_data',
                 user:     ENV['POSTGRES_USER'] || 'postgres',
                 password: ENV['POSTGRES_PASSWORD'] || 'password',
-                sslmode:  ENV['POSTGRES_SSLMODE'] || 'prefer'
+                sslmode:  ENV['POSTGRES_SSLMODE'] || 'prefer',
+                max_connections: max_connections
               )
             end
       db.test_connection
-      logger.info "Connected to PostgreSQL database"
+      logger.info "Connected to PostgreSQL database (pool size: #{max_connections})"
       db
     rescue Sequel::DatabaseConnectionError => e
       logger.fatal "Failed to connect to the database: #{e.message}"

@@ -17,6 +17,7 @@ require 'amazing_print'
 require 'digest'
 require "addressable"
 require 'openssl'
+require 'concurrent'
 
 require_relative '../lib/parsers'
 require_relative '../lib/normalizer'
@@ -31,6 +32,7 @@ BACKFILL_JOB_NAME      = "fpds_backfill".freeze # Identifier for the backfill jo
 DEFAULT_DAYS_BACK      = 2 # Used only if no previous state is found
 FETCH_TIMEOUT_SECONDS  = 4 * 60 * 60 # 4 hours, adjust as needed
 BACKFILL_EARLIEST_DATE = Date.new(2000, 10, 1) # FY2001 start — earliest FPDS data
+DEFAULT_BACKFILL_THREADS = 4 # Number of concurrent day-fetching threads
 MODEL_PROCESSING_ORDER = [:vendors, :agencies, :pscs, :naics, :offices].freeze
 BUSINESS_KEYS          = { vendors: :uei_sam, agencies: :agency_code, offices: :office_code, pscs: :psc_code, naics: :naics_code }.freeze
 
@@ -40,8 +42,14 @@ LOG.level = Logger::INFO
 require_relative '../lib/database'
 
 # --- Database Connection ---
+# Size the connection pool based on whether we're running backfill with threads.
+# Peek at ARGV early so the pool is sized before Sequel models are defined.
+_backfill_mode = ARGV.include?('--backfill') || ARGV.include?('--resume')
+_thread_arg_idx = ARGV.index('--threads')
+_thread_count = _thread_arg_idx ? (ARGV[_thread_arg_idx + 1]&.to_i || DEFAULT_BACKFILL_THREADS) : DEFAULT_BACKFILL_THREADS
+_pool_size = _backfill_mode ? [_thread_count + 2, 6].max : 4
 begin
-  DB = Database.connect(logger: LOG)
+  DB = Database.connect(logger: LOG, max_connections: _pool_size)
 rescue StandardError
   exit 1
 end
@@ -916,11 +924,15 @@ end
 
 # --- Backfill Logic ---
 # Downloads all historical FPDS data by iterating day-by-day through a date range.
-# Each day uses a closed date range query so the feed returns a bounded result set.
+# Uses a thread pool to process multiple days concurrently for maximum throughput.
 # Progress is tracked in the job_tracker table so the backfill can resume if interrupted.
-def backfill_fpds_feed(start_date, end_date, logger)
-	total_saved = 0
+def backfill_fpds_feed(start_date, end_date, logger, thread_count: DEFAULT_BACKFILL_THREADS)
+	total_saved = Concurrent::AtomicFixnum.new(0)
+	completed_days = Concurrent::AtomicFixnum.new(0)
+	failed_dates = Concurrent::Array.new
+	tracker_mutex = Mutex.new
 	job_tracker = JobTracker.find_or_create(job_name: BACKFILL_JOB_NAME)
+	last_completed_date = Concurrent::AtomicReference.new(nil)
 
 	# Resume from last completed date if available
 	if job_tracker.notes && job_tracker.notes.match(/Completed through (\d{4}-\d{2}-\d{2})/)
@@ -928,55 +940,91 @@ def backfill_fpds_feed(start_date, end_date, logger)
 		if last_completed >= start_date && last_completed < end_date
 			logger.info "Resuming backfill from #{last_completed + 1} (last completed: #{last_completed})"
 			start_date = last_completed + 1
+			last_completed_date.set(last_completed)
 		end
 	end
 
-	current_date = start_date
-	while current_date <= end_date
-		date_str = current_date.strftime('%Y/%m/%d')
+	total_days = (end_date - start_date).to_i + 1
+	logger.info "Backfill: #{total_days} days to process with #{thread_count} threads"
 
-		uri = Addressable::URI.parse("https://www.fpds.gov/ezsearch/FEEDS/ATOM")
-		uri.query_values = {
-			"FEEDNAME" => "PUBLIC",
-			"VERSION" => "1.5.3",
-			"q" => "LAST_MOD_DATE:[#{date_str},#{date_str}]",
-			"start" => "0"
-		}
-		day_url = uri.to_s
+	# Build the list of dates to process
+	dates_to_process = (start_date..end_date).to_a
 
-		logger.info "Backfill: Fetching records for #{current_date} (#{(end_date - current_date).to_i} days remaining)"
+	# Create a fixed thread pool
+	pool = Concurrent::FixedThreadPool.new(thread_count)
 
-		begin
-			day_saved = process_fpds_feed(day_url, logger)
-			total_saved += day_saved
-			logger.info "Backfill: Saved #{day_saved} records for #{current_date} (total so far: #{total_saved})"
+	dates_to_process.each do |current_date|
+		pool.post do
+			date_str = current_date.strftime('%Y/%m/%d')
 
-			job_tracker.update(
-				status: 'running',
-				notes: "Completed through #{current_date}. Total saved: #{total_saved}",
-				updated_at: Time.now
-			)
-		rescue => e
-			logger.error "Backfill: Error processing #{current_date}: #{e.message}. Will retry this date on next run."
-			job_tracker.update(
-				status: 'failed',
-				notes: "Failed on #{current_date}. Completed through #{current_date - 1}. Total saved: #{total_saved}. Error: #{e.message}",
-				updated_at: Time.now
-			)
-			raise
+			uri = Addressable::URI.parse("https://www.fpds.gov/ezsearch/FEEDS/ATOM")
+			uri.query_values = {
+				"FEEDNAME" => "PUBLIC",
+				"VERSION" => "1.5.3",
+				"q" => "LAST_MOD_DATE:[#{date_str},#{date_str}]",
+				"start" => "0"
+			}
+			day_url = uri.to_s
+
+			remaining = total_days - completed_days.value
+			logger.info "Backfill [#{current_date}]: Fetching records (#{remaining} days remaining, #{failed_dates.size} failed)"
+
+			begin
+				day_saved = process_fpds_feed(day_url, logger)
+				total_saved.increment(day_saved)
+				completed_days.increment
+
+				logger.info "Backfill [#{current_date}]: Saved #{day_saved} records (total so far: #{total_saved.value})"
+
+				# Update job tracker with the latest sequentially-completed date
+				tracker_mutex.synchronize do
+					prev = last_completed_date.get
+					if prev.nil? || current_date > prev
+						last_completed_date.set(current_date)
+					end
+					job_tracker.update(
+						status: 'running',
+						notes: "Completed #{completed_days.value}/#{total_days} days. Last: #{current_date}. Total saved: #{total_saved.value}. Failed: #{failed_dates.size}",
+						updated_at: Time.now
+					)
+				end
+			rescue => e
+				failed_dates << current_date
+				completed_days.increment
+				logger.error "Backfill [#{current_date}]: Error: #{e.message}. Will retry on next run."
+
+				tracker_mutex.synchronize do
+					job_tracker.update(
+						status: 'running',
+						notes: "Completed #{completed_days.value}/#{total_days} days. Total saved: #{total_saved.value}. Failed dates: #{failed_dates.join(', ')}",
+						updated_at: Time.now
+					)
+				end
+			end
 		end
-
-		current_date += 1
 	end
 
-	job_tracker.update(
-		status: 'idle',
-		notes: "Backfill complete. Range: #{start_date} to #{end_date}. Total saved: #{total_saved}",
-		last_successful_run_start_time: Time.now,
-		updated_at: Time.now
-	)
-	logger.info "Backfill complete! Processed #{start_date} through #{end_date}. Total saved: #{total_saved}"
-	total_saved
+	# Wait for all threads to finish
+	pool.shutdown
+	pool.wait_for_termination
+
+	if failed_dates.empty?
+		job_tracker.update(
+			status: 'idle',
+			notes: "Backfill complete. Range: #{start_date} to #{end_date}. Total saved: #{total_saved.value}. All #{total_days} days succeeded.",
+			last_successful_run_start_time: Time.now,
+			updated_at: Time.now
+		)
+		logger.info "Backfill complete! Processed #{start_date} through #{end_date}. Total saved: #{total_saved.value}"
+	else
+		job_tracker.update(
+			status: 'partial',
+			notes: "Backfill partial. Range: #{start_date} to #{end_date}. Total saved: #{total_saved.value}. #{failed_dates.size} days failed: #{failed_dates.sort.join(', ')}",
+			updated_at: Time.now
+		)
+		logger.warn "Backfill finished with #{failed_dates.size} failed days: #{failed_dates.sort.join(', ')}. Run with --resume to retry."
+	end
+	total_saved.value
 end
 
 # --- Data Fetching Logic ---
@@ -1091,6 +1139,10 @@ def parse_cli_options
 			options[:resume] = true
 		end
 
+		opts.on('--threads N', Integer, "Number of concurrent threads for backfill (default: #{DEFAULT_BACKFILL_THREADS})") do |n|
+			options[:threads] = [1, n].max
+		end
+
 		opts.on('-h', '--help', 'Show this help message') do
 			puts opts
 			exit
@@ -1103,7 +1155,7 @@ end
 # --- Main Execution ---
 if __FILE__ == $0
 	options = parse_cli_options
-
+	thread_count = options[:threads] || DEFAULT_BACKFILL_THREADS
 	lock_file_path = File.join(__dir__, "#{File.basename(__FILE__)}.lock")
 	lock_file      = File.open(lock_file_path, 'w')
 	unless lock_file.flock(File::LOCK_EX | File::LOCK_NB)
@@ -1121,12 +1173,13 @@ if __FILE__ == $0
 
 		LOG.info "=== BACKFILL MODE ==="
 		LOG.info "Downloading all FPDS records from #{backfill_start} to #{backfill_end}"
+		LOG.info "Using #{thread_count} concurrent threads (DB pool: #{_pool_size})"
 		LOG.info "This will iterate day-by-day through #{(backfill_end - backfill_start).to_i + 1} days."
 
 		setup_database(DB, LOG)
 
 		begin
-			saved_count = backfill_fpds_feed(backfill_start, backfill_end, LOG)
+			saved_count = backfill_fpds_feed(backfill_start, backfill_end, LOG, thread_count: thread_count)
 			LOG.info "Backfill completed successfully. Total records saved: #{saved_count}"
 		rescue => e
 			LOG.fatal "Backfill failed: #{e.message}"
