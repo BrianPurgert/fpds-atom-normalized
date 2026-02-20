@@ -26,6 +26,7 @@ type IndexSearchParams = {
   contractFinancing?: string
   performanceBasedService?: string
   multiYear?: string
+  reasonForModification?: string
   sortField?: SortField
   sortDir?: SortDir
   page?: number
@@ -55,6 +56,7 @@ export const Route = createFileRoute('/')({
     contractFinancing: (search.contractFinancing as string) || undefined,
     performanceBasedService: (search.performanceBasedService as string) || undefined,
     multiYear: (search.multiYear as string) || undefined,
+    reasonForModification: (search.reasonForModification as string) || undefined,
     sortField: (search.sortField as SortField) || undefined,
     sortDir: (search.sortDir as SortDir) || undefined,
     page: search.page ? Number(search.page) : undefined,
@@ -115,6 +117,30 @@ const EXTENT_COMPETED_LABELS: Record<string, string> = {
   G: 'Not Competed under SAP',
   CDO: 'Competitive Delivery Order',
   NDO: 'Non-Competitive Delivery Order',
+}
+
+const REASON_FOR_MODIFICATION_LABELS: Record<string, string> = {
+  A: 'Additional Work (new agreement, FAR part 6 applies)',
+  B: 'Supplemental Agreement for work within scope',
+  C: 'Funding Only Action',
+  D: 'Change Order',
+  E: 'Terminate for Default (complete or partial)',
+  F: 'Terminate for Convenience (complete or partial)',
+  G: 'Exercise an Option',
+  H: 'Definitize Letter Contract',
+  J: 'Novation Agreement',
+  K: 'Close Out',
+  L: 'Definitize Change Order',
+  M: 'Other Administrative Action',
+  N: 'Legal Contract Cancellation',
+  P: 'Rerepresentation of Non-Novated Merger/Acquisition',
+  R: 'Rerepresentation',
+  S: 'Change PIID',
+  T: 'Transfer Action',
+  V: 'Vendor DUNS or Name Change - Non-Novation',
+  W: 'Vendor Address Change',
+  X: 'Terminate for Cause',
+  Y: 'Add Subcontract Plan',
 }
 
 /* SVG Icons */
@@ -186,7 +212,8 @@ function SearchPage() {
     !!(search.agency || search.vendor || search.naics || search.psc || search.state ||
        search.dateFrom || search.dateTo || search.amountMin || search.amountMax || search.setAside ||
        search.zipCode || search.congressionalDistrict || search.modDateFrom || search.modDateTo ||
-       search.extentCompeted || search.piid || search.solicitationId || search.description)
+       search.extentCompeted || search.piid || search.solicitationId || search.description ||
+       search.reasonForModification)
   )
 
   const [formState, setFormState] = useState<IndexSearchParams>({
@@ -209,6 +236,7 @@ function SearchPage() {
     amountMax: search.amountMax ?? '',
     setAside: search.setAside ?? '',
     extentCompeted: search.extentCompeted ?? '',
+    reasonForModification: search.reasonForModification ?? '',
     sortField: search.sortField,
     sortDir: search.sortDir,
   })
@@ -234,6 +262,7 @@ function SearchPage() {
     if (formState.amountMax) params.amountMax = formState.amountMax
     if (formState.setAside) params.setAside = formState.setAside
     if (formState.extentCompeted) params.extentCompeted = formState.extentCompeted
+    if (formState.reasonForModification) params.reasonForModification = formState.reasonForModification
     if (formState.sortField && formState.sortField !== 'atom_feed_modified_date') params.sortField = formState.sortField
     if (formState.sortDir && formState.sortDir !== 'desc') params.sortDir = formState.sortDir
     if (pageNum && pageNum > 1) params.page = pageNum
@@ -281,6 +310,7 @@ function SearchPage() {
       zipCode: '', congressionalDistrict: '',
       dateFrom: '', dateTo: '', modDateFrom: '', modDateTo: '',
       amountMin: '', amountMax: '', setAside: '', extentCompeted: '',
+      reasonForModification: '',
       sortField: undefined, sortDir: undefined,
     })
     navigate({ to: '/', search: {} })
@@ -293,6 +323,7 @@ function SearchPage() {
     search.dateFrom, search.dateTo, search.modDateFrom, search.modDateTo,
     search.amountMin, search.amountMax, search.setAside, search.extentCompeted,
     search.piid, search.solicitationId, search.description,
+    search.reasonForModification,
   ].filter(Boolean).length
 
   return (
@@ -512,6 +543,46 @@ function SearchPage() {
                           </select>
                         </td>
                         <td colSpan={2}></td>
+                      </tr>
+
+                      <tr style={{ background: '#d2e4fc' }}>
+                        <td colSpan={6}><strong style={{ fontSize: '8pt' }}>Reason for Modification</strong></td>
+                      </tr>
+                      <tr>
+                        <td colSpan={6} style={{ padding: '4px' }}>
+                          <div style={{ display: 'flex', flexWrap: 'wrap', gap: '4px' }}>
+                            {(() => {
+                              const selectedReasons = new Set((formState.reasonForModification || '').split(',').filter(Boolean))
+                              return Object.entries(REASON_FOR_MODIFICATION_LABELS).map(([code, label]) => {
+                                const isSelected = selectedReasons.has(code)
+                                return (
+                                  <button
+                                    key={code}
+                                    type="button"
+                                    onClick={() => {
+                                      const nextCodes = new Set(selectedReasons)
+                                      if (isSelected) nextCodes.delete(code)
+                                      else nextCodes.add(code)
+                                      setFormState(s => ({ ...s, reasonForModification: Array.from(nextCodes).join(',') }))
+                                    }}
+                                    style={{
+                                      fontSize: '7pt',
+                                      padding: '1px 4px',
+                                      border: '1px solid #999',
+                                      background: isSelected ? '#0558a5' : '#eee',
+                                      color: isSelected ? '#fff' : '#000',
+                                      cursor: 'pointer',
+                                      borderRadius: '2px',
+                                    }}
+                                    title={label}
+                                  >
+                                    {code}: {label.length > 25 ? label.substring(0, 25) + '...' : label}
+                                  </button>
+                                )
+                              })
+                            })()}
+                          </div>
+                        </td>
                       </tr>
 
                       <tr style={{ background: '#d2e4fc' }}>
@@ -850,7 +921,12 @@ function ContractRow({ contract, index }: { contract: ContractResult; index: num
                   <DetailRow label="Contracting Agency" value={`${contract.agency_name ?? 'N/A'} (${contract.agency_code ?? ''})`} label2="Funding Agency" value2={contract.funding_agency_name ?? 'N/A'} />
                   <DetailRow label="Contracting Office" value={contract.contracting_office_name ?? 'N/A'} label2="Funding Office" value2={contract.funding_office_name ?? 'N/A'} />
                   <DetailRow label="Action Type" value={contract.action_type_description ?? 'N/A'} label2="Pricing Type" value2={contract.pricing_type_description ?? 'N/A'} />
-                  {contract.reason_for_modification && <DetailRow label="Reason for Modification" value={contract.reason_for_modification} />}
+                  {contract.reason_for_modification && (
+                    <DetailRow
+                      label="Reason for Modification"
+                      value={`${contract.reason_for_modification}${REASON_FOR_MODIFICATION_LABELS[contract.reason_for_modification] ? ` — ${REASON_FOR_MODIFICATION_LABELS[contract.reason_for_modification]}` : ''}`}
+                    />
+                  )}
 
                   {/* Vendor */}
                   <tr><td colSpan={2} style={{ padding: '4px 0 2px', borderBottom: '1px solid #ccc' }}><strong className="results_title_text" style={{ color: '#0558a5' }}>Vendor</strong></td></tr>

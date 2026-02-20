@@ -31,7 +31,7 @@ JOB_NAME               = "fpds_daily_ingestion".freeze # Identifier for the job 
 BACKFILL_JOB_NAME      = "fpds_backfill".freeze # Identifier for the backfill job tracker
 DEFAULT_DAYS_BACK      = 2 # Used only if no previous state is found
 FETCH_TIMEOUT_SECONDS  = 4 * 60 * 60 # 4 hours, adjust as needed
-BACKFILL_EARLIEST_DATE = Date.new(2000, 10, 1) # FY2001 start — earliest FPDS data
+BACKFILL_EARLIEST_DATE = Date.new(1998, 2, 1) # FY2001 start — earliest FPDS data
 DEFAULT_BACKFILL_THREADS = 4 # Number of concurrent day-fetching threads
 MODEL_PROCESSING_ORDER = [:vendors, :agencies, :pscs, :naics, :offices].freeze
 BUSINESS_KEYS          = { vendors: :uei_sam, agencies: :agency_code, offices: :office_code, pscs: :psc_code, naics: :naics_code }.freeze
@@ -934,21 +934,21 @@ def backfill_fpds_feed(start_date, end_date, logger, thread_count: DEFAULT_BACKF
 	job_tracker = JobTracker.find_or_create(job_name: BACKFILL_JOB_NAME)
 	last_completed_date = Concurrent::AtomicReference.new(nil)
 
-	# Resume from last completed date if available
-	if job_tracker.notes && job_tracker.notes.match(/Completed through (\d{4}-\d{2}-\d{2})/)
-		last_completed = Date.parse($1)
+	# Resume from last completed date using fpds_contract_actions data
+	max_modified = DB[:fpds_contract_actions].max(:fpds_last_modified_date)
+	if max_modified
+		last_completed = max_modified.to_date
 		if last_completed >= start_date && last_completed < end_date
-			logger.info "Resuming backfill from #{last_completed + 1} (last completed: #{last_completed})"
+			logger.info "Resuming backfill from #{last_completed + 1} (last ingested fpds_last_modified_date: #{last_completed})"
 			start_date = last_completed + 1
 			last_completed_date.set(last_completed)
 		end
 	end
 
-	total_days = (end_date - start_date).to_i + 1
-	logger.info "Backfill: #{total_days} days to process with #{thread_count} threads"
-
 	# Build the list of dates to process
 	dates_to_process = (start_date..end_date).to_a
+	total_days = dates_to_process.size
+	logger.info "Backfill: #{total_days} days to process with #{thread_count} threads"
 
 	# Create a fixed thread pool
 	pool = Concurrent::FixedThreadPool.new(thread_count)
@@ -982,24 +982,25 @@ def backfill_fpds_feed(start_date, end_date, logger, thread_count: DEFAULT_BACKF
 					if prev.nil? || current_date > prev
 						last_completed_date.set(current_date)
 					end
-					job_tracker.update(
-						status: 'running',
-						notes: "Completed #{completed_days.value}/#{total_days} days. Last: #{current_date}. Total saved: #{total_saved.value}. Failed: #{failed_dates.size}",
-						updated_at: Time.now
-					)
+ 				job_tracker.update(
+ 					status: 'running',
+ 					notes: "Completed through #{last_completed_date.get}. #{completed_days.value}/#{total_days} days done. Total saved: #{total_saved.value}. Failed: #{failed_dates.size}",
+ 					updated_at: Time.now
+ 				)
 				end
 			rescue => e
 				failed_dates << current_date
 				completed_days.increment
 				logger.error "Backfill [#{current_date}]: Error: #{e.message}. Will retry on next run."
 
-				tracker_mutex.synchronize do
-					job_tracker.update(
-						status: 'running',
-						notes: "Completed #{completed_days.value}/#{total_days} days. Total saved: #{total_saved.value}. Failed dates: #{failed_dates.join(', ')}",
-						updated_at: Time.now
-					)
-				end
+ 			tracker_mutex.synchronize do
+ 				lcd_note = last_completed_date.get ? "Completed through #{last_completed_date.get}. " : ""
+ 				job_tracker.update(
+ 					status: 'running',
+ 					notes: "#{lcd_note}#{completed_days.value}/#{total_days} days done. Total saved: #{total_saved.value}. Failed dates: #{failed_dates.join(', ')}",
+ 					updated_at: Time.now
+ 				)
+ 			end
 			end
 		end
 	end
@@ -1011,7 +1012,7 @@ def backfill_fpds_feed(start_date, end_date, logger, thread_count: DEFAULT_BACKF
 	if failed_dates.empty?
 		job_tracker.update(
 			status: 'idle',
-			notes: "Backfill complete. Range: #{start_date} to #{end_date}. Total saved: #{total_saved.value}. All #{total_days} days succeeded.",
+			notes: "Completed through #{end_date}. Backfill complete. Range: #{start_date} to #{end_date}. Total saved: #{total_saved.value}. All #{total_days} days succeeded.",
 			last_successful_run_start_time: Time.now,
 			updated_at: Time.now
 		)
@@ -1019,7 +1020,7 @@ def backfill_fpds_feed(start_date, end_date, logger, thread_count: DEFAULT_BACKF
 	else
 		job_tracker.update(
 			status: 'partial',
-			notes: "Backfill partial. Range: #{start_date} to #{end_date}. Total saved: #{total_saved.value}. #{failed_dates.size} days failed: #{failed_dates.sort.join(', ')}",
+			notes: "Completed through #{end_date}. Backfill partial. Total saved: #{total_saved.value}. #{failed_dates.size} days failed: #{failed_dates.sort.join(', ')}",
 			updated_at: Time.now
 		)
 		logger.warn "Backfill finished with #{failed_dates.size} failed days: #{failed_dates.sort.join(', ')}. Run with --resume to retry."

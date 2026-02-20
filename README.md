@@ -17,7 +17,7 @@ This package fetches modified contract award records from the FPDS Atom feed, pa
   - `fpds_naics_codes` — Industry codes
 - Creates the fact table `fpds_contract_actions` with contract details, obligated amounts, and foreign keys to all dimensions
 - Uses content hashing for idempotency (avoids duplicate ingestion)
-- Tracks state via a `job_tracker` table (remembers last fetch date, supports resume on failure)
+- Supports resume on failure by querying the latest `fpds_last_modified_date` in `fpds_contract_actions`
 - Handles missed days automatically by backfilling since the last successful run
 
 ## Requirements
@@ -78,7 +78,7 @@ bundle exec ruby scripts/fetch_fpds_modified_awards_normalized_v3.rb --resume
 
 Backfill mode iterates day-by-day through the date range, querying the feed with closed date ranges (`LAST_MOD_DATE:[date,date]`) and paginating through all results for each day. **Multiple days are processed concurrently** using a thread pool (default: 4 threads) for significantly faster throughput.
 
-Progress is tracked in the `job_tracker` table, so interrupted runs can be resumed with `--resume`. Days that fail are recorded and can be retried on the next run.
+Progress is tracked by querying the latest `fpds_last_modified_date` in `fpds_contract_actions`, so interrupted runs can be resumed with `--resume`.
 
 Existing records are automatically skipped via content-hash deduplication, so it is safe to re-run overlapping date ranges.
 
@@ -102,6 +102,11 @@ The database connection pool is automatically sized to match the thread count. H
 | `--threads N` | Number of concurrent threads for backfill (default: `4`) |
 | `--resume` | Resume a previously interrupted backfill |
 | `-h`, `--help` | Show help message |
+
+```bash
+bundle exec ruby scripts/fetch_fpds_modified_awards_normalized_v3.rb --backfill --start-date 2009-12-07 --threads 7
+```
+
 
 ## Automation (GitHub Actions)
 

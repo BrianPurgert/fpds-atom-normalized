@@ -41,6 +41,7 @@ export type SearchParams = {
   contractFinancing?: string
   performanceBasedService?: string
   multiYear?: string
+  reasonForModification?: string
   sortField?: SortField
   sortDir?: SortDir
   page?: number
@@ -140,6 +141,7 @@ export const searchContracts = createServerFn({ method: 'GET' })
       contractFinancing: s(params.contractFinancing),
       performanceBasedService: s(params.performanceBasedService),
       multiYear: s(params.multiYear),
+      reasonForModification: s(params.reasonForModification),
       sortField: s(params.sortField) as SortField | undefined,
       sortDir: s(params.sortDir) as SortDir | undefined,
     } as SearchParams
@@ -235,6 +237,12 @@ export const searchContracts = createServerFn({ method: 'GET' })
       if (params.contractFinancing && params.contractFinancing.trim()) q = q.eq('contract_financing', params.contractFinancing.trim())
       if (params.performanceBasedService && params.performanceBasedService.trim()) q = q.eq('performance_based_service_contract', params.performanceBasedService.trim())
       if (params.multiYear && params.multiYear.trim()) q = q.eq('multi_year_contract', params.multiYear.trim())
+      if (params.reasonForModification && params.reasonForModification.trim()) {
+        const codes = params.reasonForModification.split(',').map(s => s.trim()).filter(Boolean)
+        if (codes.length > 0) {
+          q = q.in('reason_for_modification', codes)
+        }
+      }
       return q
     }
 
