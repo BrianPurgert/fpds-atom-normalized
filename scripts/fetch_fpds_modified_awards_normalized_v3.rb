@@ -923,10 +923,31 @@ def process_page_batch(entries_xml_strings, logger)
 end
 
 # --- Backfill Logic ---
+# Finds all dates that have NO records in the fpds_contract_actions table within the given range.
+def find_missing_backfill_dates(start_date, end_date, logger)
+	logger.info "Searching for missing dates (gaps) between #{start_date} and #{end_date}..."
+	# 1. Get all distinct dates currently in the DB using casting for speed
+	# PostgreSQL syntax: fpds_last_modified_date::date
+	existing_dates = DB[:fpds_contract_actions]
+		.select(Sequel.cast(:fpds_last_modified_date, :date).as(:modified_date))
+		.distinct
+		.where(fpds_last_modified_date: (start_date.to_time..(end_date + 1).to_time))
+		.map(:modified_date)
+		.to_set
+
+	logger.info "Found #{existing_dates.size} distinct days with data in the DB."
+
+	# 2. Compare against the intended full range
+	missing_dates = (start_date..end_date).to_a.reject { |d| existing_dates.include?(d) }
+	
+	logger.info "Identified #{missing_dates.size} missing days to backfill."
+	missing_dates
+end
+
 # Downloads all historical FPDS data by iterating day-by-day through a date range.
 # Uses a thread pool to process multiple days concurrently for maximum throughput.
 # Progress is tracked in the job_tracker table so the backfill can resume if interrupted.
-def backfill_fpds_feed(start_date, end_date, logger, thread_count: DEFAULT_BACKFILL_THREADS)
+def backfill_fpds_feed(start_date, end_date, logger, thread_count: DEFAULT_BACKFILL_THREADS, specific_dates: nil)
 	total_saved = Concurrent::AtomicFixnum.new(0)
 	completed_days = Concurrent::AtomicFixnum.new(0)
 	failed_dates = Concurrent::Array.new
@@ -934,19 +955,23 @@ def backfill_fpds_feed(start_date, end_date, logger, thread_count: DEFAULT_BACKF
 	job_tracker = JobTracker.find_or_create(job_name: BACKFILL_JOB_NAME)
 	last_completed_date = Concurrent::AtomicReference.new(nil)
 
-	# Resume from last completed date using fpds_contract_actions data
-	max_modified = DB[:fpds_contract_actions].max(:fpds_last_modified_date)
-	if max_modified
-		last_completed = max_modified.to_date
-		if last_completed >= start_date && last_completed < end_date
-			logger.info "Resuming backfill from #{last_completed + 1} (last ingested fpds_last_modified_date: #{last_completed})"
-			start_date = last_completed + 1
-			last_completed_date.set(last_completed)
+	# Build the list of dates to process
+	dates_to_process = specific_dates
+	
+	if dates_to_process.nil?
+		# Standard resume logic only if not doing a gap-fill
+		max_modified = DB[:fpds_contract_actions].max(:fpds_last_modified_date)
+		if max_modified
+			last_completed = max_modified.to_date
+			if last_completed >= start_date && last_completed < end_date
+				logger.info "Resuming backfill from #{last_completed + 1} (last ingested fpds_last_modified_date: #{last_completed})"
+				start_date = last_completed + 1
+				last_completed_date.set(last_completed)
+			end
 		end
+		dates_to_process = (start_date..end_date).to_a
 	end
 
-	# Build the list of dates to process
-	dates_to_process = (start_date..end_date).to_a
 	total_days = dates_to_process.size
 	logger.info "Backfill: #{total_days} days to process with #{thread_count} threads"
 
@@ -1140,6 +1165,11 @@ def parse_cli_options
 			options[:resume] = true
 		end
 
+		opts.on('--gap-fill', 'Find and fill gaps in the historical data instead of resuming from max date') do
+			options[:mode] = :backfill
+			options[:gap_fill] = true
+		end
+
 		opts.on('--threads N', Integer, "Number of concurrent threads for backfill (default: #{DEFAULT_BACKFILL_THREADS})") do |n|
 			options[:threads] = [1, n].max
 		end
@@ -1180,7 +1210,12 @@ if __FILE__ == $0
 		setup_database(DB, LOG)
 
 		begin
-			saved_count = backfill_fpds_feed(backfill_start, backfill_end, LOG, thread_count: thread_count)
+			specific_dates = nil
+			if options[:gap_fill]
+				specific_dates = find_missing_backfill_dates(backfill_start, backfill_end, LOG)
+			end
+
+			saved_count = backfill_fpds_feed(backfill_start, backfill_end, LOG, thread_count: thread_count, specific_dates: specific_dates)
 			LOG.info "Backfill completed successfully. Total records saved: #{saved_count}"
 		rescue => e
 			LOG.fatal "Backfill failed: #{e.message}"
