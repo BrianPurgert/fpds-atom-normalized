@@ -270,6 +270,9 @@ def setup_database(db, logger)
 			String :closed_by, text: true
 			DateTime :closed_date
 
+			# Full Text Search vector
+			column :fts_vector, :tsvector
+
 			# Contract Marketing Data
 			String :fee_paid_for_use_of_service, text: true
 			String :who_can_use, text: true

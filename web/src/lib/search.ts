@@ -210,22 +210,26 @@ export const searchContracts = createServerFn({ method: 'GET' })
     function applyFilters(q: any) {
       if (params.q && params.q.trim()) {
         const term = params.q.trim()
-        const filters: string[] = []
         
-        // Performance optimization: only search broad fields if the term is substantial
-        if (term.length >= 2) {
-          filters.push(`piid.ilike.%${term}%`)
-          filters.push(`solicitation_id.ilike.%${term}%`)
+        // Use Full Text Search (FTS) if the term is substantial (>= 3 chars)
+        // This utilizes the 'fts_vector' column and GIN index for high performance
+        if (term.length >= 3) {
+          q = q.textSearch('fts_vector', term, { 
+            config: 'english',
+            type: 'websearch' 
+          })
         } else {
-          // Very short terms (1 char) only search PIID to avoid massive scans
-          filters.push(`piid.eq.${term.toUpperCase()}`)
+          // Fallback for short terms: search PIID/Solicitation directly using btree indices
+          const filters: string[] = []
+          if (term.length >= 2) {
+            filters.push(`piid.ilike.%${term}%`)
+            filters.push(`solicitation_id.ilike.%${term}%`)
+          } else {
+            // 1-char terms use high-selectivity equality match
+            filters.push(`piid.eq.${term.toUpperCase()}`)
+          }
+          q = q.or(filters.join(','))
         }
-        
-        if (term.length >= 4) {
-          filters.push(`description_of_requirement.ilike.%${term}%`)
-        }
-        
-        q = q.or(filters.join(','))
       }
       if (params.piid && params.piid.trim()) q = q.ilike('piid', `%${params.piid.trim()}%`)
       if (params.solicitationId && params.solicitationId.trim()) q = q.ilike('solicitation_id', `%${params.solicitationId.trim()}%`)
