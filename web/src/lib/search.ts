@@ -210,10 +210,21 @@ export const searchContracts = createServerFn({ method: 'GET' })
     function applyFilters(q: any) {
       if (params.q && params.q.trim()) {
         const term = params.q.trim()
-        const filters = [`piid.ilike.%${term}%`, `solicitation_id.ilike.%${term}%`]
-        if (term.length >= 3) {
+        const filters: string[] = []
+        
+        // Performance optimization: only search broad fields if the term is substantial
+        if (term.length >= 2) {
+          filters.push(`piid.ilike.%${term}%`)
+          filters.push(`solicitation_id.ilike.%${term}%`)
+        } else {
+          // Very short terms (1 char) only search PIID to avoid massive scans
+          filters.push(`piid.eq.${term.toUpperCase()}`)
+        }
+        
+        if (term.length >= 4) {
           filters.push(`description_of_requirement.ilike.%${term}%`)
         }
+        
         q = q.or(filters.join(','))
       }
       if (params.piid && params.piid.trim()) q = q.ilike('piid', `%${params.piid.trim()}%`)
@@ -247,9 +258,28 @@ export const searchContracts = createServerFn({ method: 'GET' })
     }
 
     // Phase 1: lightweight count query (no joins, no data) - use estimated for speed
-    const countQuery = applyFilters(
-      db.from('fpds_contract_actions').select('id', { count: 'estimated', head: true })
-    )
+    let total = 0
+    try {
+      const countQuery = applyFilters(
+        db.from('fpds_contract_actions').select('id', { count: 'estimated', head: true })
+      )
+      const { count, error } = await countQuery
+      if (error) {
+        console.error('Count error (estimated):', error)
+        // Fallback to a very large number if count fails, to allow some pagination
+        total = 1000000
+      } else {
+        total = count ?? 0
+      }
+    } catch (err) {
+      console.error('Count exception:', err)
+      total = 1000000
+    }
+
+    if (total === 0 && !params.q && !params.piid) {
+       // Only return empty if we're sure there's no data
+       // But if we have filters, we should try the data query anyway
+    }
 
     // Phase 2: data query with joins (no count)
     const dataQuery = applyFilters(db
@@ -280,19 +310,13 @@ export const searchContracts = createServerFn({ method: 'GET' })
       .order(sortField, { ascending: sortDir === 'asc', nullsFirst: false })
       .range(offset, offset + limit - 1)
 
-    // Run both in parallel
-    const [countResult, dataResult] = await Promise.all([countQuery, dataQuery])
+    const dataResult = await dataQuery
 
-    if (countResult.error) {
-      console.error('Count error:', countResult.error)
-      throw new Error(`Search failed: ${countResult.error.message}`)
-    }
     if (dataResult.error) {
       console.error('Search error:', dataResult.error)
       throw new Error(`Search failed: ${dataResult.error.message}`)
     }
 
-    const total = countResult.count ?? 0
     const results: ContractResult[] = (dataResult.data ?? []).map((row: any) => ({
       id: row.id,
       piid: row.piid,
@@ -360,25 +384,37 @@ export const searchContracts = createServerFn({ method: 'GET' })
     }
   })
 
+let filterOptionsCache: any = null
+let lastCacheTime = 0
+const CACHE_TTL = 3600 * 1000 // 1 hour
+
 export const getFilterOptions = createServerFn({ method: 'GET' })
   .handler(async () => {
+    if (filterOptionsCache && Date.now() - lastCacheTime < CACHE_TTL) {
+      return filterOptionsCache
+    }
+
     const db = getSupabase()
 
     const [agencies, setAsides, states, extentCompeted] = await Promise.all([
       db.from('fpds_agencies').select('agency_code, agency_name').order('agency_name').limit(500),
-      db.from('fpds_contract_actions').select('type_of_set_aside').not('type_of_set_aside', 'is', null).limit(1000),
-      db.from('fpds_contract_actions').select('pop_state_code').not('pop_state_code', 'is', null).limit(5000),
-      db.from('fpds_contract_actions').select('extent_competed').not('extent_competed', 'is', null).limit(1000),
+      db.from('fpds_contract_actions').select('type_of_set_aside').not('type_of_set_aside', 'is', null).limit(2000),
+      db.from('fpds_contract_actions').select('pop_state_code').not('pop_state_code', 'is', null).limit(10000),
+      db.from('fpds_contract_actions').select('extent_competed').not('extent_competed', 'is', null).limit(2000),
     ])
 
     const uniqueSetAsides = [...new Set((setAsides.data ?? []).map((r: any) => r.type_of_set_aside).filter(Boolean))].sort()
     const uniqueStates = [...new Set((states.data ?? []).map((r: any) => r.pop_state_code).filter(Boolean))].sort()
     const uniqueExtentCompeted = [...new Set((extentCompeted.data ?? []).map((r: any) => r.extent_competed).filter(Boolean))].sort()
 
-    return {
+    const result = {
       agencies: agencies.data ?? [],
       setAsides: uniqueSetAsides as string[],
       states: uniqueStates as string[],
       extentCompeted: uniqueExtentCompeted as string[],
     }
+
+    filterOptionsCache = result
+    lastCacheTime = Date.now()
+    return result
   })

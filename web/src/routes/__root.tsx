@@ -4,8 +4,9 @@ import {
   createRootRoute,
   HeadContent,
   Scripts,
+  ErrorComponent,
 } from '@tanstack/react-router'
-import type { ReactNode } from 'react'
+import type { ErrorComponentProps, ReactNode } from 'react'
 import appCss from '~/styles.css?url'
 
 export const Route = createRootRoute({
@@ -21,6 +22,29 @@ export const Route = createRootRoute({
   }),
   component: RootComponent,
   shellComponent: RootDocument,
+  errorComponent: (props: ErrorComponentProps) => (
+    <RootDocument>
+      <div style={{ padding: 20, textAlign: 'center' }}>
+        <h2 style={{ color: '#d00' }}>Search Application Error</h2>
+        <p style={{ color: '#444' }}>{props.error?.message || 'An unexpected error occurred.'}</p>
+        <button
+          onClick={() => props.reset()}
+          style={{ padding: '8px 16px', background: '#0558a5', color: '#fff', border: 'none', cursor: 'pointer' }}
+        >
+          Try Again
+        </button>
+      </div>
+    </RootDocument>
+  ),
+  notFoundComponent: () => (
+    <RootDocument>
+      <div style={{ padding: 20, textAlign: 'center' }}>
+        <h2 style={{ color: '#444' }}>404 - Not Found</h2>
+        <p>The page you are looking for does not exist.</p>
+        <a href="/" style={{ color: '#0558a5', textDecoration: 'underline' }}>Return to Search</a>
+      </div>
+    </RootDocument>
+  ),
 })
 
 function RootDocument({ children }: Readonly<{ children: ReactNode }>) {
