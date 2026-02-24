@@ -7,3 +7,10 @@ node_modules/
 vendor/
 .bundle/
 /web/dist/
+/.output.txt
+/web/bun.lock
+/web/.wrangler/deploy/config.json
+/scripts/fetch_fpds_modified_awards_normalized_v3.rb.lock
+/.ai/mcp/mcp.json
+/.junie/mcp/mcp.json
+/web/package-lock.json

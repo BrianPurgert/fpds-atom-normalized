@@ -926,25 +926,45 @@ def process_page_batch(entries_xml_strings, logger)
 end
 
 # --- Backfill Logic ---
-# Finds all dates that have NO records in the fpds_contract_actions table within the given range.
+# Analyzes backfill coverage by counting records per day using group_and_count.
+# Returns a Hash of { Date => start_offset } where start_offset is the number of
+# records already in the DB for that day (rounded down to nearest 10 for FPDS page
+# alignment). Missing days have offset 0; partial days resume from their offset.
 def find_missing_backfill_dates(start_date, end_date, logger)
-	logger.info "Searching for missing dates (gaps) between #{start_date} and #{end_date}..."
-	# 1. Get all distinct dates currently in the DB using casting for speed
-	# PostgreSQL syntax: fpds_last_modified_date::date
-	existing_dates = DB[:fpds_contract_actions]
-		.select(Sequel.cast(:fpds_last_modified_date, :date).as(:modified_date))
-		.distinct
+	logger.info "Analyzing backfill coverage between #{start_date} and #{end_date}..."
+
+	# 1. Get count of records per day using group_and_count
+	daily_counts = DB[:fpds_contract_actions]
 		.where(fpds_last_modified_date: (start_date.to_time..(end_date + 1).to_time))
-		.map(:modified_date)
-		.to_set
+		.group_and_count(Sequel.cast(:fpds_last_modified_date, :date).as(:modified_date))
+		.all
+		.to_h { |row| [row[:modified_date], row[:count]] }
 
-	logger.info "Found #{existing_dates.size} distinct days with data in the DB."
+	logger.info "Found data for #{daily_counts.size} distinct days in the DB."
 
-	# 2. Compare against the intended full range
-	missing_dates = (start_date..end_date).to_a.reject { |d| existing_dates.include?(d) }
-	
-	logger.info "Identified #{missing_dates.size} missing days to backfill."
-	missing_dates
+	# 2. Build result: { date => start_offset } for every date in range
+	#    The FPDS ATOM feed returns 10 entries per page; the 'start' query parameter
+	#    is a 0-based offset. Round down to the nearest 10 so we land on a valid page
+	#    boundary and let the existing content-hash dedup handle any overlap.
+	date_offsets  = {}
+	missing_count = 0
+	partial_count = 0
+
+	(start_date..end_date).each do |d|
+		count = daily_counts[d] || 0
+		if count == 0
+			date_offsets[d] = 0
+			missing_count += 1
+		else
+			# Round down to nearest 10 for FPDS page alignment
+			start_offset    = (count / 10) * 10
+			date_offsets[d] = start_offset
+			partial_count  += 1
+		end
+	end
+
+	logger.info "Coverage: #{missing_count} missing days, #{partial_count} days with existing data (will resume from offset)."
+	date_offsets
 end
 
 # Downloads all historical FPDS data by iterating day-by-day through a date range.
@@ -958,9 +978,21 @@ def backfill_fpds_feed(start_date, end_date, logger, thread_count: DEFAULT_BACKF
 	job_tracker = JobTracker.find_or_create(job_name: BACKFILL_JOB_NAME)
 	last_completed_date = Concurrent::AtomicReference.new(nil)
 
-	# Build the list of dates to process
-	dates_to_process = specific_dates
-	
+	# Build the list of dates to process and their start offsets.
+	# specific_dates may be:
+	#   nil   -> normal backfill, all offsets default to 0
+	#   Hash  -> gap-fill: { Date => start_offset } from find_missing_backfill_dates
+	#   Array -> legacy: plain array of Date objects, all offsets 0
+	date_offsets = {}
+	dates_to_process = nil
+
+	if specific_dates.is_a?(Hash)
+		date_offsets     = specific_dates
+		dates_to_process = specific_dates.keys.sort
+	elsif specific_dates.is_a?(Array)
+		dates_to_process = specific_dates
+	end
+
 	if dates_to_process.nil?
 		# Standard resume logic only if not doing a gap-fill
 		max_modified = DB[:fpds_contract_actions].max(:fpds_last_modified_date)
@@ -983,19 +1015,21 @@ def backfill_fpds_feed(start_date, end_date, logger, thread_count: DEFAULT_BACKF
 
 	dates_to_process.each do |current_date|
 		pool.post do
-			date_str = current_date.strftime('%Y/%m/%d')
+			date_str     = current_date.strftime('%Y/%m/%d')
+			start_offset = date_offsets[current_date] || 0
 
 			uri = Addressable::URI.parse("https://www.fpds.gov/ezsearch/FEEDS/ATOM")
 			uri.query_values = {
 				"FEEDNAME" => "PUBLIC",
 				"VERSION" => "1.5.3",
 				"q" => "LAST_MOD_DATE:[#{date_str},#{date_str}]",
-				"start" => "0"
+				"start" => start_offset.to_s
 			}
 			day_url = uri.to_s
 
 			remaining = total_days - completed_days.value
-			logger.info "Backfill [#{current_date}]: Fetching records (#{remaining} days remaining, #{failed_dates.size} failed)"
+			offset_note = start_offset > 0 ? " (resuming from offset #{start_offset})" : ""
+			logger.info "Backfill [#{current_date}]: Fetching records#{offset_note} (#{remaining} days remaining, #{failed_dates.size} failed)"
 
 			begin
 				day_saved = process_fpds_feed(day_url, logger)
@@ -1111,6 +1145,8 @@ def process_fpds_feed(start_url, logger)
 		total_successful_saves += saved_count
 
 		next_link_node = page_doc.at_xpath('//link[@rel="next"]/@href')
+
+
 		if next_link_node
 			# Ensure the next URL is absolute and properly encoded
 			begin
