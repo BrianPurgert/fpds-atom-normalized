@@ -729,10 +729,20 @@ function ResultsBox({ results, currentPage, goToPage, sortField, sortDir, change
   sortDir: SortDir
   changeSort: (field: SortField) => void
 }) {
-  const exportToExcel = () => {
+  const search = Route.useSearch()
+  const [isExporting, setIsExporting] = useState(false)
+
+  const exportToExcel = async () => {
     if (!results || !results.results || results.results.length === 0) return
 
-    const columns = [
+    try {
+      setIsExporting(true)
+      const exportData = await searchContracts({ data: { ...search, isExport: true } })
+      const dataToExport = exportData?.results || []
+
+      if (dataToExport.length === 0) return
+
+      const columns = [
       { header: 'Contract ID (PIID)', key: 'piid' },
       { header: 'Modification Number', key: 'modification_number' },
       { header: 'Vendor Name', key: 'vendor_name' },
@@ -746,7 +756,7 @@ function ResultsBox({ results, currentPage, goToPage, sortField, sortDir, change
     ]
 
     const headerRow = columns.map(c => `"${c.header}"`).join(',')
-    const dataRows = results.results.map(row => {
+    const dataRows = dataToExport.map(row => {
       return columns.map(c => {
         let val = (row as any)[c.key]
         if (val === null || val === undefined) val = ''
@@ -764,6 +774,12 @@ function ResultsBox({ results, currentPage, goToPage, sortField, sortDir, change
     document.body.appendChild(link)
     link.click()
     document.body.removeChild(link)
+    URL.revokeObjectURL(url)
+    } catch (err) {
+      console.error('Failed to export to excel:', err)
+    } finally {
+      setIsExporting(false)
+    }
   }
 
   return (
@@ -774,8 +790,8 @@ function ResultsBox({ results, currentPage, goToPage, sortField, sortDir, change
             <td className="box-heading">
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                 <div><SearchIcon /> Search Results</div>
-                <button type="button" onClick={exportToExcel} className="go-btn" style={{ fontSize: '8pt', padding: '2px 8px', cursor: 'pointer' }}>
-                  Export to Excel
+                <button type="button" onClick={exportToExcel} disabled={isExporting} className="go-btn" style={{ fontSize: '8pt', padding: '2px 8px', cursor: isExporting ? 'not-allowed' : 'pointer', opacity: isExporting ? 0.7 : 1 }}>
+                  {isExporting ? 'Exporting...' : 'Export to Excel'}
                 </button>
               </div>
             </td>

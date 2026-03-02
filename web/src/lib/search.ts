@@ -46,6 +46,7 @@ export type SearchParams = {
   sortDir?: SortDir
   page?: number
   limit?: number
+  isExport?: boolean
 }
 
 export type ContractResult = {
@@ -144,12 +145,15 @@ export const searchContracts = createServerFn({ method: 'GET' })
       reasonForModification: s(params.reasonForModification),
       sortField: s(params.sortField) as SortField | undefined,
       sortDir: s(params.sortDir) as SortDir | undefined,
+      page: params.page,
+      limit: params.limit,
+      isExport: params.isExport,
     } as SearchParams
   })
   .handler(async ({ data: params }): Promise<SearchResponse> => {
     const db = getSupabase()
     const page = params.page ?? 1
-    const limit = Math.min(params.limit ?? 25, 100)
+    const limit = params.isExport ? 50000 : Math.min(params.limit ?? 25, 100)
     const offset = (page - 1) * limit
     const sortField: SortField = params.sortField ?? 'atom_feed_modified_date'
     const sortDir: SortDir = params.sortDir ?? 'desc'
