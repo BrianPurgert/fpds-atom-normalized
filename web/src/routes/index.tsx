@@ -729,13 +729,55 @@ function ResultsBox({ results, currentPage, goToPage, sortField, sortDir, change
   sortDir: SortDir
   changeSort: (field: SortField) => void
 }) {
+  const exportToExcel = () => {
+    if (!results || !results.results || results.results.length === 0) return
+
+    const columns = [
+      { header: 'Contract ID (PIID)', key: 'piid' },
+      { header: 'Modification Number', key: 'modification_number' },
+      { header: 'Vendor Name', key: 'vendor_name' },
+      { header: 'UEI', key: 'uei_sam' },
+      { header: 'Action Obligation', key: 'obligated_amount' },
+      { header: 'Date Signed', key: 'signed_date' },
+      { header: 'Effective Date', key: 'effective_date' },
+      { header: 'Last Modified Date', key: 'atom_feed_modified_date' },
+      { header: 'Agency', key: 'agency_id' },
+      { header: 'Description', key: 'description_of_requirement' }
+    ]
+
+    const headerRow = columns.map(c => `"${c.header}"`).join(',')
+    const dataRows = results.results.map(row => {
+      return columns.map(c => {
+        let val = (row as any)[c.key]
+        if (val === null || val === undefined) val = ''
+        val = String(val).replace(/"/g, '""')
+        return `"${val}"`
+      }).join(',')
+    })
+
+    const csvContent = [headerRow, ...dataRows].join('\n')
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' })
+    const url = URL.createObjectURL(blob)
+    const link = document.createElement('a')
+    link.href = url
+    link.setAttribute('download', 'search_results.csv')
+    document.body.appendChild(link)
+    link.click()
+    document.body.removeChild(link)
+  }
+
   return (
     <div style={{ marginTop: 8 }}>
       <table className="box">
         <tbody>
           <tr>
             <td className="box-heading">
-              <SearchIcon /> Search Results
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                <div><SearchIcon /> Search Results</div>
+                <button type="button" onClick={exportToExcel} className="go-btn" style={{ fontSize: '8pt', padding: '2px 8px', cursor: 'pointer' }}>
+                  Export to Excel
+                </button>
+              </div>
             </td>
           </tr>
           <tr>

@@ -7,7 +7,6 @@ require 'json'
 require 'stringio'
 require 'optparse'
 
-require 'nori'
 require 'sequel'
 require 'logger'
 require 'cgi'
@@ -37,6 +36,7 @@ MODEL_PROCESSING_ORDER = [:vendors, :agencies, :pscs, :naics, :offices].freeze
 BUSINESS_KEYS          = { vendors: :uei_sam, agencies: :agency_code, offices: :office_code, pscs: :psc_code, naics: :naics_code }.freeze
 
 LOG       = Logger.new(STDOUT)
+LOG.formatter = proc { |severity, datetime, progname, msg| ("#{severity} #{msg}\n") }
 LOG.level = Logger::INFO
 
 require_relative '../lib/database'
@@ -181,7 +181,6 @@ def setup_database(db, logger)
 
 			String :raw_xml_content_sha256, size: 64
 			String :reason_for_modification, text: true
-			column :atom_content, :jsonb
 
 			# Award/Contract ID
 			String :referenced_idv_piid, text: true
@@ -500,18 +499,6 @@ def process_page_batch(entries_xml_strings, logger)
 		begin
 			doc = Nokogiri::XML(entry_xml)
 			doc.remove_namespaces!
-			# nori_hash = Nori.new({
-			#                      strip_namespaces:              true,
-			#                      delete_namespace_attributes:   false,
-			#                      convert_tags_to:               'underscore',
-			#                      convert_attributes_to:         nil,
-			#                      empty_tag_value:               nil,
-			#                      advanced_typecasting:          true,
-			#                      convert_dashes_to_underscores: true,
-			#                      scrub_xml:                     true,
-			#                      parser:                        :nokogiri
-			#                      }).parse entry_xml
-			# puts nori_hash
 		rescue Nokogiri::XML::SyntaxError => e
 			logger.error "Malformed XML for entry #{idx + 1} on page. Error: #{e.message}. Skipping this entry."
 			next
@@ -763,29 +750,11 @@ def process_page_batch(entries_xml_strings, logger)
 			content_xml_string = content_node.to_s
 			raw_xml_sha256     = Digest::SHA256.hexdigest(content_xml_string)
 
-			# Parse atom content with Nori for jsonb storage
 			begin
-				nori_hash = Nori.new({
-					strip_namespaces:              true,
-					delete_namespace_attributes:   false,
-					convert_attributes_to:         nil,
-					empty_tag_value:               nil,
-					advanced_typecasting:          true,
-					convert_dashes_to_underscores: false,
-					scrub_xml:                     true,
-					parser:                        :nokogiri
-				}).parse(content_xml_string)
-
-				reason_for_modification = nori_hash.dig('award', 'contractData', 'reasonForModification') ||
-				                         nori_hash.dig('IDV', 'contractData', 'reasonForModification') ||
-				                         nori_hash.dig('OtherTransactionAward', 'contractDetail', 'reasonForModification') ||
-				                         nori_hash.dig('OtherTransactionIDV', 'contractDetail', 'reasonForModification')
-
-				atom_content_json = nori_hash.to_json
+				reason_for_modification = content_node.at_xpath('.//contractData/reasonForModification')&.text&.strip
 			rescue => e
-				logger.warn "Error parsing XML with Nori for entry #{entry_hash_id}: #{e.message}. Using nil values."
+				logger.warn "Error extracting reason_for_modification for entry #{entry_hash_id}: #{e.message}. Using nil values."
 				reason_for_modification = nil
-				atom_content_json = nil
 			end
 
 			# Extract generic tags
@@ -850,7 +819,6 @@ def process_page_batch(entries_xml_strings, logger)
 			fpds_last_modified_date:     parse_datetime(content_node.at_xpath('.//transactionInformation/lastModifiedDate')&.text),
 			raw_xml_content_sha256:      raw_xml_sha256,
 			reason_for_modification:     reason_for_modification,
-			atom_content:                atom_content_json,
 			generic_strings:             generic_strings_hash,
 			generic_booleans:            generic_booleans_hash,
 			}.merge(normalized)
@@ -934,9 +902,10 @@ def find_missing_backfill_dates(start_date, end_date, logger)
 	logger.info "Analyzing backfill coverage between #{start_date} and #{end_date}..."
 
 	# 1. Get count of records per day using group_and_count
+	# I think the column fpds_last_modified_date and atom_feed_modified_date are the same but I'm not sure
 	daily_counts = DB[:fpds_contract_actions]
-		.where(fpds_last_modified_date: (start_date.to_time..(end_date + 1).to_time))
-		.group_and_count(Sequel.cast(:fpds_last_modified_date, :date).as(:modified_date))
+		.where(atom_feed_modified_date: (start_date.to_time..(end_date + 1).to_time))
+		.group_and_count(Sequel.cast(:atom_feed_modified_date, :date).as(:modified_date))
 		.all
 		.to_h { |row| [row[:modified_date], row[:count]] }
 
@@ -956,15 +925,118 @@ def find_missing_backfill_dates(start_date, end_date, logger)
 			date_offsets[d] = 0
 			missing_count += 1
 		else
-			# Round down to nearest 10 for FPDS page alignment
-			start_offset    = (count / 10) * 10
-			date_offsets[d] = start_offset
+			# Since DB counts (grouped by fpds_last_modified_date) do not accurately map
+			# to the feed's search results for a specific day, and because the feed order
+			# is unpredictable, resuming from an offset based on DB count will skip the
+			# beginning of the feed and miss gaps. We must start from 0 to ensure all gaps are filled.
+			date_offsets[d] = 0
 			partial_count  += 1
 		end
 	end
 
-	logger.info "Coverage: #{missing_count} missing days, #{partial_count} days with existing data (will resume from offset)."
+	logger.info "Coverage: #{missing_count} missing days, #{partial_count} days with existing data (will start from 0 for thorough gap-fill)."
 	date_offsets
+end
+
+# --- Preflight helpers for performance optimization with correctness ---
+# Determines the exact number of entries available in the FPDS Atom feed
+# for a specific day by following the rel="last" link and counting the
+# entries on that last page.
+# Returns Integer total entries, or nil if preflight fails.
+def fetch_fpds_total_entries_for_day(day, logger)
+	date_str = day.strftime('%Y/%m/%d')
+	uri = Addressable::URI.parse("https://www.fpds.gov/ezsearch/FEEDS/ATOM")
+	uri.query_values = {
+		"FEEDNAME" => "PUBLIC",
+		"VERSION" => "1.5.3",
+		"q" => "LAST_MOD_DATE:[#{date_str},#{date_str}]",
+		"start" => "0"
+	}
+	first_url = uri.to_s
+
+	retries = 0
+	max_retries = 3
+	begin
+		response = URI.open(
+			first_url,
+			"User-Agent" => "FPDS.me Client/2.0",
+			open_timeout: 120,
+			read_timeout: 300
+		)
+		xml = response.read
+		doc = Nokogiri::XML(xml)
+		doc.remove_namespaces!
+		entries_first = doc.xpath('//entry').size
+		last_href_node = doc.at_xpath('//link[@rel="last"]/@href')
+		unless last_href_node
+			return entries_first
+		end
+
+		base_uri_str = response.base_uri.to_s
+		next_href = last_href_node.value.to_s
+		base_uri = Addressable::URI.parse(base_uri_str)
+		last_uri = Addressable::URI.parse(next_href)
+		last_url = last_uri.relative? ? (base_uri + last_uri).to_s : last_uri.to_s
+
+		# Fetch last page and count entries to compute exact total
+		last_resp = URI.open(
+			last_url,
+			"User-Agent" => "FPDS.me Client/2.0",
+			open_timeout: 120,
+			read_timeout: 300
+		)
+		last_xml = last_resp.read
+		last_doc = Nokogiri::XML(last_xml)
+		last_doc.remove_namespaces!
+		entries = last_doc.xpath('//entry')
+		entries_last = entries.size
+
+		if entries_last > 0
+			entry_hashes = []
+			entries.each do |entry_node|
+				title           = entry_node.at_xpath('./title')&.text&.strip
+				modified_dt_str = entry_node.at_xpath('./modified')&.text&.strip
+				
+				if title && !title.empty? && modified_dt_str && !modified_dt_str.empty?
+					modified_dt = parse_datetime(modified_dt_str)
+					if modified_dt
+						key_str       = "#{title}-#{modified_dt.iso8601(3)}"
+						entry_hashes << Digest::SHA256.hexdigest(key_str)
+					end
+				end
+			end
+
+			if entry_hashes.any?
+				existing_count = DB[:fpds_contract_actions].where(atom_entry_id: entry_hashes).count
+				if existing_count > 0 && existing_count == entry_hashes.size
+					logger.info "Preflight hash check: All #{entry_hashes.size} entries on the last page for #{day} already exist in DB. Treating day as fully covered."
+					return 0
+				end
+			end
+		end
+
+		# Parse 'start' from last_url
+		begin
+			last_qs = Addressable::URI.parse(last_url).query_values || {}
+			last_start = (last_qs["start"] || "0").to_i
+		rescue
+			# Fallback if parsing fails
+			last_start = 0
+		end
+
+		total = last_start + entries_last
+		total = [total, entries_first].max
+		total
+	rescue => e
+		retries += 1
+		if retries <= max_retries
+			sleep(2 ** retries)
+			retry
+		else
+			logger.warn "Preflight failed for #{day}: #{e.message}. Falling back to nil total."
+			nil
+		end
+	end
 end
 
 # Downloads all historical FPDS data by iterating day-by-day through a date range.
@@ -1013,12 +1085,41 @@ def backfill_fpds_feed(start_date, end_date, logger, thread_count: DEFAULT_BACKF
 	# Create a fixed thread pool
 	pool = Concurrent::FixedThreadPool.new(thread_count)
 
-	dates_to_process.each do |current_date|
-		pool.post do
-			date_str     = current_date.strftime('%Y/%m/%d')
-			start_offset = date_offsets[current_date] || 0
+		dates_to_process.each do |current_date|
+			pool.post do
+				date_str     = current_date.strftime('%Y/%m/%d')
+				start_offset = date_offsets[current_date] || 0
 
-			uri = Addressable::URI.parse("https://www.fpds.gov/ezsearch/FEEDS/ATOM")
+				# Preflight: compare DB count vs feed total to optionally skip fully covered days
+				begin
+					db_count_for_day = DB[:fpds_contract_actions]
+						.where(atom_feed_modified_date: (current_date.to_time..(current_date + 1).to_time))
+						.count
+					feed_total_for_day = fetch_fpds_total_entries_for_day(current_date, logger)
+				rescue => e
+					logger.warn "Preflight DB/feed check failed for #{current_date}: #{e.message}"
+					db_count_for_day = nil
+					feed_total_for_day = nil
+				end
+
+				if feed_total_for_day && db_count_for_day && db_count_for_day >= feed_total_for_day
+					logger.info "Backfill [#{current_date}]: Already fully covered in DB (db=#{db_count_for_day}, feed=#{feed_total_for_day}). Skipping."
+					completed_days.increment
+					tracker_mutex.synchronize do
+						prev = last_completed_date.get
+						if prev.nil? || current_date > prev
+							last_completed_date.set(current_date)
+						end
+						job_tracker.update(
+							status: 'running',
+							notes: "Completed through #{last_completed_date.get}. #{completed_days.value}/#{total_days} days done. Total saved: #{total_saved.value}. Failed: #{failed_dates.size}",
+							updated_at: Time.now
+						)
+					end
+					next
+				end
+
+				uri = Addressable::URI.parse("https://www.fpds.gov/ezsearch/FEEDS/ATOM")
 			uri.query_values = {
 				"FEEDNAME" => "PUBLIC",
 				"VERSION" => "1.5.3",
