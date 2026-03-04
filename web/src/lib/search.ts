@@ -439,6 +439,7 @@ export type NonGsaContractor = {
   is_small_business?: boolean | null
   is_women_owned?: boolean | null
   is_veteran_owned?: boolean | null
+  total_obligated_amount?: number | null
 }
 
 export type NonGsaContractorsResponse = {

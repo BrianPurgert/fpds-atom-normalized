@@ -14,12 +14,18 @@ export const Route = createFileRoute('/non-gsa-contractors')({
   component: NonGsaContractorsPage,
 })
 
+function formatCurrency(amount: number | null | undefined): string {
+  if (amount === null || amount === undefined) return 'N/A'
+  return new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', maximumFractionDigits: 2 }).format(amount)
+}
+
 function NonGsaContractorsPage() {
   const { results, page, limit } = Route.useLoaderData()
   const search = Route.useSearch()
   const navigate = Route.useNavigate()
 
   const [columns, setColumns] = useState({
+    total_obligated_amount: false,
     street_address: false,
     city: false,
     state: false,
@@ -92,6 +98,7 @@ function NonGsaContractorsPage() {
               {columns.city && <th className="fpds-table-header">City</th>}
               {columns.state && <th className="fpds-table-header">State</th>}
               {columns.zip_code && <th className="fpds-table-header">Zip Code</th>}
+              {columns.total_obligated_amount && <th className="fpds-table-header">Total Obligated Amount</th>}
               {columns.is_small_business && <th className="fpds-table-header">Small Business</th>}
               {columns.is_women_owned && <th className="fpds-table-header">Women Owned</th>}
               {columns.is_veteran_owned && <th className="fpds-table-header">Veteran Owned</th>}
@@ -119,6 +126,7 @@ function NonGsaContractorsPage() {
                   {columns.city && <td className="fpds-table-cell">{contractor.city || 'N/A'}</td>}
                   {columns.state && <td className="fpds-table-cell">{contractor.state || 'N/A'}</td>}
                   {columns.zip_code && <td className="fpds-table-cell">{contractor.zip_code || 'N/A'}</td>}
+                  {columns.total_obligated_amount && <td className="fpds-table-cell">{formatCurrency(contractor.total_obligated_amount)}</td>}
                   {columns.is_small_business && <td className="fpds-table-cell">{contractor.is_small_business ? 'Yes' : 'No'}</td>}
                   {columns.is_women_owned && <td className="fpds-table-cell">{contractor.is_women_owned ? 'Yes' : 'No'}</td>}
                   {columns.is_veteran_owned && <td className="fpds-table-cell">{contractor.is_veteran_owned ? 'Yes' : 'No'}</td>}
