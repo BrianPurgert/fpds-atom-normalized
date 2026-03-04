@@ -53,12 +53,13 @@ function NonGsaContractorsPage() {
               <th className="fpds-table-header">Vendor Name</th>
               <th className="fpds-table-header">UEI (SAM)</th>
               <th className="fpds-table-header">Phone Number</th>
+              <th className="fpds-table-header">Email</th>
             </tr>
           </thead>
           <tbody>
             {results.length === 0 ? (
               <tr>
-                <td colSpan={3} style={{ textAlign: 'center', padding: '20px' }}>No contractors found.</td>
+                <td colSpan={4} style={{ textAlign: 'center', padding: '20px' }}>No contractors found.</td>
               </tr>
             ) : (
               results.map((contractor, idx) => (
@@ -66,6 +67,13 @@ function NonGsaContractorsPage() {
                   <td className="fpds-table-cell">{contractor.vendor_name || 'N/A'}</td>
                   <td className="fpds-table-cell">{contractor.uei_sam || 'N/A'}</td>
                   <td className="fpds-table-cell">{contractor.phone_no || 'N/A'}</td>
+                  <td className="fpds-table-cell">
+                    {contractor.email ? (
+                      <a href={`mailto:${contractor.email}`}>{contractor.email}</a>
+                    ) : (
+                      'N/A'
+                    )}
+                  </td>
                 </tr>
               ))
             )}

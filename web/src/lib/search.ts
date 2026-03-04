@@ -431,6 +431,7 @@ export type NonGsaContractor = {
   uei_sam: string
   vendor_name: string
   phone_no: string
+  email: string | null
 }
 
 export type NonGsaContractorsResponse = {
