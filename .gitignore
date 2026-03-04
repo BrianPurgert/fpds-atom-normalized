@@ -14,3 +14,4 @@ vendor/
 /.ai/mcp/mcp.json
 /.junie/mcp/mcp.json
 /web/package-lock.json
+/.junie/

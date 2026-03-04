@@ -432,6 +432,13 @@ export type NonGsaContractor = {
   vendor_name: string
   phone_no: string
   email: string | null
+  street_address?: string | null
+  city?: string | null
+  state?: string | null
+  zip_code?: string | null
+  is_small_business?: boolean | null
+  is_women_owned?: boolean | null
+  is_veteran_owned?: boolean | null
 }
 
 export type NonGsaContractorsResponse = {
