@@ -79,6 +79,9 @@ function RootComponent() {
                 </a>
               </td>
               <td className="fpds-header-right">
+                <a href="/non-gsa-contractors" style={{ color: '#fff', textDecoration: 'none', marginRight: '20px', fontWeight: 'bold' }}>
+                  Non-GSA Contractors
+                </a>
                 <span className="fpds-subtitle">Data sourced from FPDS.gov Atom Feed</span>
               </td>
             </tr>

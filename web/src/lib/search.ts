@@ -426,3 +426,45 @@ export const getFilterOptions = createServerFn({ method: 'GET' })
     lastCacheTime = Date.now()
     return result
   })
+
+export type NonGsaContractor = {
+  uei_sam: string
+  vendor_name: string
+  phone_no: string
+}
+
+export type NonGsaContractorsResponse = {
+  results: NonGsaContractor[]
+  page: number
+  limit: number
+}
+
+export const getNonGsaContractors = createServerFn({ method: 'GET' })
+  .inputValidator((params: { page?: number; limit?: number } | undefined) => {
+    return {
+      page: params?.page ?? 1,
+      limit: params?.limit ?? 50,
+    }
+  })
+  .handler(async ({ data }): Promise<NonGsaContractorsResponse> => {
+    const db = getSupabase()
+    const page = data.page
+    const limit = data.limit
+    const offset = (page - 1) * limit
+
+    const { data: results, error } = await db
+      .from('non_gsa_contractors_view')
+      .select('*')
+      .range(offset, offset + limit - 1)
+
+    if (error) {
+      console.error('getNonGsaContractors error:', error)
+      throw new Error(`Failed to fetch non-GSA contractors: ${error.message}`)
+    }
+
+    return {
+      results: results as NonGsaContractor[],
+      page,
+      limit,
+    }
+  })

@@ -9,8 +9,14 @@
 // Additionally, you should also exclude this file from your linter and/or formatter to prevent it from being checked or modified.
 
 import { Route as rootRouteImport } from './routes/__root'
+import { Route as NonGsaContractorsRouteImport } from './routes/non-gsa-contractors'
 import { Route as IndexRouteImport } from './routes/index'
 
+const NonGsaContractorsRoute = NonGsaContractorsRouteImport.update({
+  id: '/non-gsa-contractors',
+  path: '/non-gsa-contractors',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const IndexRoute = IndexRouteImport.update({
   id: '/',
   path: '/',
@@ -19,28 +25,39 @@ const IndexRoute = IndexRouteImport.update({
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
+  '/non-gsa-contractors': typeof NonGsaContractorsRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
+  '/non-gsa-contractors': typeof NonGsaContractorsRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
+  '/non-gsa-contractors': typeof NonGsaContractorsRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
-  fullPaths: '/'
+  fullPaths: '/' | '/non-gsa-contractors'
   fileRoutesByTo: FileRoutesByTo
-  to: '/'
-  id: '__root__' | '/'
+  to: '/' | '/non-gsa-contractors'
+  id: '__root__' | '/' | '/non-gsa-contractors'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
+  NonGsaContractorsRoute: typeof NonGsaContractorsRoute
 }
 
 declare module '@tanstack/react-router' {
   interface FileRoutesByPath {
+    '/non-gsa-contractors': {
+      id: '/non-gsa-contractors'
+      path: '/non-gsa-contractors'
+      fullPath: '/non-gsa-contractors'
+      preLoaderRoute: typeof NonGsaContractorsRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/': {
       id: '/'
       path: '/'
@@ -53,6 +70,7 @@ declare module '@tanstack/react-router' {
 
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
+  NonGsaContractorsRoute: NonGsaContractorsRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)
