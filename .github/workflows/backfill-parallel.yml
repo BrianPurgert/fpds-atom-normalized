@@ -1,0 +1,104 @@
+name: FPDS Parallel Backfill
+# Splits a date range into parallel chunks and runs each as a separate GitHub Actions job.
+# Useful for rapidly downloading the entire FPDS dataset before the Atom feed is decommissioned.
+
+on:
+  workflow_dispatch:
+    inputs:
+      start_date:
+        description: 'Backfill start date (YYYY-MM-DD)'
+        required: true
+        default: '1998-01-01'
+      end_date:
+        description: 'Backfill end date (YYYY-MM-DD)'
+        required: true
+        default: '2025-12-31'
+      num_chunks:
+        description: 'Number of parallel jobs (max 256)'
+        required: true
+        default: '100'
+      threads_per_job:
+        description: 'Threads per job for day-level concurrency'
+        required: true
+        default: '4'
+
+permissions:
+  contents: read
+
+jobs:
+  # ── Step 1: compute the date-range matrix ──────────────────────────────
+  plan:
+    name: Generate chunk matrix
+    runs-on: ubuntu-latest
+    outputs:
+      matrix: ${{ steps.generate.outputs.matrix }}
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Ruby
+        uses: ruby/setup-ruby@v1
+        with:
+          ruby-version: '3.2'
+
+      - name: Generate date chunks
+        id: generate
+        run: |
+          MATRIX=$(ruby scripts/generate_date_chunks.rb \
+            "${{ inputs.start_date }}" \
+            "${{ inputs.end_date }}" \
+            "${{ inputs.num_chunks }}")
+          echo "matrix={\"include\":$MATRIX}" >> "$GITHUB_OUTPUT"
+
+  # ── Step 2: run one backfill job per chunk ─────────────────────────────
+  backfill:
+    name: "Chunk ${{ matrix.chunk }}: ${{ matrix.start_date }} → ${{ matrix.end_date }}"
+    needs: plan
+    runs-on: ubuntu-latest
+    timeout-minutes: 360
+    strategy:
+      matrix: ${{ fromJson(needs.plan.outputs.matrix) }}
+      fail-fast: false          # keep other chunks running if one fails
+      max-parallel: 256         # GitHub's maximum; effectively unlimited
+    env:
+      POSTGRES_URL:      ${{ secrets.POSTGRES_URL }}
+      PG_URL:            ${{ secrets.PG_URL }}
+      POSTGRES_HOST:     ${{ secrets.POSTGRES_HOST }}
+      POSTGRES_DATABASE: ${{ secrets.POSTGRES_DATABASE }}
+      POSTGRES_USER:     ${{ secrets.POSTGRES_USER }}
+      POSTGRES_PASSWORD: ${{ secrets.POSTGRES_PASSWORD }}
+      POSTGRES_SSLMODE:  ${{ secrets.POSTGRES_SSLMODE }}
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Ruby
+        uses: ruby/setup-ruby@v1
+        with:
+          ruby-version: '3.2'
+          bundler-cache: true
+
+      - name: Install system dependencies (for pg gem)
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libpq-dev
+
+      - name: Prepare DB environment
+        shell: bash
+        run: |
+          if [ -z "${POSTGRES_URL}" ] && [ -n "${PG_URL}" ]; then
+            echo "POSTGRES_URL=${PG_URL}" >> "$GITHUB_ENV"
+          fi
+
+      - name: "Run backfill: ${{ matrix.start_date }} to ${{ matrix.end_date }}"
+        if: ${{ env.POSTGRES_URL != '' || env.PG_URL != '' || env.POSTGRES_HOST != '' }}
+        run: |
+          bundle exec ruby scripts/fetch_fpds_modified_awards_normalized_v3.rb \
+            --backfill \
+            --start-date "${{ matrix.start_date }}" \
+            --end-date   "${{ matrix.end_date }}" \
+            --threads    "${{ inputs.threads_per_job }}"
+
+      - name: Skip (no DB configuration found)
+        if: ${{ !(env.POSTGRES_URL != '' || env.PG_URL != '' || env.POSTGRES_HOST != '') }}
+        run: echo "No database connection secrets configured. Set POSTGRES_URL or PG_URL, or POSTGRES_HOST/POSTGRES_DATABASE/POSTGRES_USER/POSTGRES_PASSWORD."
