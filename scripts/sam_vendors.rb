@@ -51,6 +51,10 @@ def clean_and_validate_url(url_string)
     return nil unless ['http', 'https'].include?(uri.scheme.downcase)
     # Ensure host contains at least one dot (basic domain validation)
     return nil unless uri.host.include?('.')
+    
+    # Convert all http to https
+    uri.scheme = 'https' if uri.scheme.downcase == 'http'
+    
     # Return the cleaned URL
     return uri.to_s
   rescue URI::InvalidURIError
@@ -72,7 +76,8 @@ BASE_URL     = 'https://api.sam.gov/data-services/v1/extracts'
 
 EXTRACT_DIR  = File.expand_path('../downloads/sam_extracts', __dir__)
 
-TABLE_NAME   = :sam_vendors
+TABLE_NAME       = :sam_vendors
+TEMP_TABLE_NAME  = :sam_vendors_tmp
 Dir.mkdir(EXTRACT_DIR) unless Dir.exist?(EXTRACT_DIR)
 
 LOG = Logger.new($stdout)
@@ -376,7 +381,7 @@ Dir.mktmpdir do |dir|
 	Zip::File.open(local_zip) do |zip|
 		entry = zip.find { |e| e.name.downcase.end_with?('.dat') }
 		csv_path = File.join(dir, entry.name)
-		entry.extract(csv_path)
+		entry.extract(entry.name, destination_directory: dir)
 	end
 	LOG.info "Extracted #{File.basename(csv_path)}"
 	extract_date_str = File.basename(csv_path).split('_').last.split('.').first
@@ -437,8 +442,8 @@ DAT_COLUMNS = [
   :flex_field_18, :flex_field_19, :extract_date
 ]
 
-DB.drop_table?(TABLE_NAME)
-DB.create_table TABLE_NAME do
+DB.drop_table?(TEMP_TABLE_NAME)
+DB.create_table TEMP_TABLE_NAME do
   String :uei_sam,                          size: 12
   String :entity_eft_indicator,             size:        4
   String :cage_code,                        size:        5
@@ -557,13 +562,13 @@ DB.create_table TABLE_NAME do
   Date   :extract_date
 end
 
-vendors = DB[TABLE_NAME]
-LOG.info "Recreated table #{TABLE_NAME}"
+vendors = DB[TEMP_TABLE_NAME]
+LOG.info "Recreated table #{TEMP_TABLE_NAME}"
 
 sam_vendor_columns = vendors.columns
 LOG.info "Table has #{sam_vendor_columns.size} columns"
 
-column_info = DB.schema(TABLE_NAME)
+column_info = DB.schema(TEMP_TABLE_NAME)
 column_sizes = {}
 column_info.each do |col|
   name, info = col
@@ -652,81 +657,20 @@ begin
   end
 
   LOG.info "Finished reading file. Total rows inserted: #{total_processed}"
+
+  LOG.info "Adding index on uei_sam to temporary table..."
+  DB.add_index TEMP_TABLE_NAME, :uei_sam
+
+  LOG.info "Swapping temporary table to production table..."
+  DB.transaction do
+    DB.drop_table?(TABLE_NAME)
+    DB.rename_table(TEMP_TABLE_NAME, TABLE_NAME)
+  end
+  LOG.info "Table swap complete!"
+
 rescue => e
   LOG.error "Failed to process DAT file: #{e.message}"
   LOG.error e.backtrace.join("\n")
   exit 1
 end
 end # End of Dir.mktmpdir block
-
-
-# --- Exclusions Extract Download (appendix) ---
-# Attempts to download the latest Exclusions public monthly extract using the same Extracts API.
-# Naming is inferred; we try multiple variants across recent months until we get HTTP 200.
-
-def first_sunday_of_month(date)
-  d = Date.new(date.year, date.month, 1)
-  d += 1 until d.sunday?
-  d
-end
-
-EXCLUSIONS_NAME_PATTERNS = [
-  'EXCLUSIONS_PUBLIC_MONTHLY_V2_%Y%m%d.ZIP',
-  'EXCLUSIONS_PUBLIC_MONTHLY_%Y%m%d.ZIP',
-  'SAM_EXCLUSIONS_PUBLIC_MONTHLY_V2_%Y%m%d.ZIP',
-  'SAM_EXCLUSIONS_PUBLIC_MONTHLY_%Y%m%d.ZIP',
-  'EXCLUSIONS_PUBLIC_V2_%Y%m%d.ZIP',
-  'EXCLUSIONS_PUBLIC_%Y%m%d.ZIP'
-]
-
-# Try recent months back to 12 months
-
-def api_latest_exclusions(api_key)
-  today = Date.today
-  0.upto(12) do |i|
-    m  = today << i
-    fs = first_sunday_of_month(m)
-    EXCLUSIONS_NAME_PATTERNS.each do |fmt|
-      fn = fs.strftime(fmt)
-      code, body = raw_get(api_key, fileName: fn)
-
-      case code
-      when 200
-        if body && body.bytesize > 0
-          return [fn, body]
-        else
-          LOG.warn "Received 200 but empty body for #{fn}"
-        end
-      when 429
-        LOG.warn "Rate limited (429) for #{fn}; backing off briefly before continuing"
-        sleep 2
-      when 401, 403
-        LOG.warn "Authorization error (#{code}) for exclusions request #{fn}. Skipping exclusions download."
-        return nil
-      when 0
-        # Timeout or transport-level error already logged in raw_get
-        # Continue to next pattern/month
-      else
-        LOG.debug "Non-success #{code} for #{fn}"
-      end
-
-      sleep 0.25 # gentle pacing to avoid hammering API
-    end
-  end
-  nil
-end
-
-begin
-  LOG.info 'Attempting to download the Exclusions public monthly extract...'
-  ex = api_latest_exclusions(API_KEY)
-  if ex
-    fn, bytes = ex
-    out_path = File.join(EXTRACT_DIR, fn)
-    File.binwrite(out_path, bytes)
-    LOG.info "Saved Exclusions extract to #{out_path} (#{bytes.bytesize / 1_048_576} MB)"
-  else
-    LOG.warn 'Could not locate a recent Exclusions extract via API.'
-  end
-rescue => e
-  LOG.warn "Exclusions download failed: #{e.message}"
-end
