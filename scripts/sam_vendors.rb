@@ -579,8 +579,33 @@ column_info.each do |col|
 end
 
 batch = []
-batch_size = 1000
+batch_size = 10000
 total_processed = 0
+
+# Pre-calculate column mapping to avoid O(N) lookup per row
+insert_columns = []
+operations = []
+
+DAT_COLUMNS.each_with_index do |col_name, idx|
+  next unless sam_vendor_columns.include?(col_name)
+
+  if col_name == :extract_date
+    # Handled separately to always append at the end
+  else
+    insert_columns << col_name
+    type = :string
+    if [:initial_registration_date, :registration_expiration_date, :last_update_date, :activation_date, :entity_start_date].include?(col_name)
+      type = :date
+    elsif [:business_type_string, :naics_code_string, :psc_code_string, :naics_exception_string, :sba_business_types_string, :disaster_response_string].include?(col_name)
+      type = :json
+    elsif col_name == :entity_url
+      type = :url
+    end
+    
+    operations << { idx: idx, type: type, max_len: column_sizes[col_name] }
+  end
+end
+insert_columns << :extract_date
 
 begin
   unless File.exist?(csv_path) && File.readable?(csv_path)
@@ -588,72 +613,65 @@ begin
     exit 1
   end
 
-  LOG.info "Starting to read DAT file: #{csv_path}"
+  LOG.info "Starting to read DAT file: #{csv_path} with batch_size=#{batch_size}"
   
-  File.foreach(csv_path) do |line|
-    begin
-      stripped_line = line.strip
+  # Wrap in a single database transaction to vastly reduce IO sync overhead
+  DB.transaction do
+    File.foreach(csv_path) do |line|
+      begin
+        stripped_line = line.strip
 
-      next if stripped_line.start_with?('BOF')
-      next if stripped_line.start_with?('EOF')
-      next if stripped_line.empty?
+        next if stripped_line.start_with?('BOF')
+        next if stripped_line.start_with?('EOF')
+        next if stripped_line.empty?
 
-      parsed_columns = stripped_line.split('|')
+        parsed_columns = stripped_line.split('|')
 
-      if parsed_columns.length < 142
-        parsed_columns.fill(nil, parsed_columns.length, 142 - parsed_columns.length)
+        if parsed_columns.length < 142
+          parsed_columns.fill(nil, parsed_columns.length, 142 - parsed_columns.length)
+        end
+
+        row_data = operations.map do |op|
+          val = parsed_columns[op[:idx]]
+          
+          case op[:type]
+          when :date
+            parse_sam_date(val)
+          when :json
+            parse_tilde_array(val)
+          when :url
+            val ? clean_and_validate_url(val) : nil
+          else
+            if op[:max_len] && val.is_a?(String) && val.length > op[:max_len]
+              val[0...op[:max_len]]
+            else
+              val
+            end
+          end
+        end
+        
+        row_data << extract_date
+        batch << row_data
+
+      rescue => e
+        LOG.error "Error parsing line: #{line[0..100]}..."
+        LOG.error e.message
+        next
       end
-
-      row_hash = {}
-      DAT_COLUMNS.each_with_index do |col_name, idx|
-        next unless sam_vendor_columns.include?(col_name)
-
-        if col_name == :extract_date
-          row_hash[col_name] = extract_date
-          next
-        end
-
-        val = parsed_columns[idx]
-
-        if [:initial_registration_date, :registration_expiration_date, :last_update_date, :activation_date, :entity_start_date].include?(col_name)
-          row_hash[col_name] = parse_sam_date(val)
-          next
-        end
-
-        if [:business_type_string, :naics_code_string, :psc_code_string, :naics_exception_string, :sba_business_types_string, :disaster_response_string].include?(col_name)
-          row_hash[col_name] = parse_tilde_array(val)
-          next
-        end
-
-        if val && col_name == :entity_url
-          val = clean_and_validate_url(val)
-        end
-
-        if column_sizes[col_name] && val.is_a?(String) && val.length > column_sizes[col_name]
-          val = val[0...column_sizes[col_name]]
-        end
-
-        row_hash[col_name] = val
-      end
-
-      batch << row_hash
 
       if batch.size >= batch_size
-        vendors.multi_insert(batch)
+        vendors.import(insert_columns, batch, slice: 400)
         total_processed += batch.size
         LOG.info "Processed #{total_processed} rows..."
         batch.clear
       end
-    rescue => e
-      LOG.error "Error processing line: #{line[0..100]}..."
-      LOG.error e.message
     end
-  end
 
-  if batch.any?
-    vendors.multi_insert(batch)
-    total_processed += batch.size
-    LOG.info "Processed #{total_processed} rows..."
+    if batch.any?
+      vendors.import(insert_columns, batch, slice: 400)
+      total_processed += batch.size
+      LOG.info "Processed #{total_processed} rows..."
+    end
   end
 
   LOG.info "Finished reading file. Total rows inserted: #{total_processed}"
