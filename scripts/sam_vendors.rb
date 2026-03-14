@@ -634,7 +634,7 @@ begin
         row_data = operations.map do |op|
           val = parsed_columns[op[:idx]]
           
-          case op[:type]
+          processed_val = case op[:type]
           when :date
             parse_sam_date(val)
           when :json
@@ -642,11 +642,13 @@ begin
           when :url
             val ? clean_and_validate_url(val) : nil
           else
-            if op[:max_len] && val.is_a?(String) && val.length > op[:max_len]
-              val[0...op[:max_len]]
-            else
-              val
-            end
+            val
+          end
+
+          if op[:max_len] && processed_val.is_a?(String) && processed_val.length > op[:max_len]
+            processed_val[0...op[:max_len]]
+          else
+            processed_val
           end
         end
         
