@@ -37,69 +37,87 @@ DB = Database.connect(logger: LOG)
 
 ELIB_TABLE = :elibrary
 
+def ensure_generated_columns(db, logger)
+  db.run(<<~SQL)
+    ALTER TABLE #{ELIB_TABLE}
+    ADD COLUMN IF NOT EXISTS contract_start_date date
+    GENERATED ALWAYS AS (((ultimate_contract_end_date - interval '20 years')::date)) STORED
+  SQL
+
+  db.run(<<~SQL)
+    CREATE INDEX IF NOT EXISTS idx_elibrary_contract_start_date
+      ON #{ELIB_TABLE} (contract_start_date DESC)
+      WHERE contract_start_date IS NOT NULL
+  SQL
+
+  logger.info("Ensured generated columns/indexes for #{ELIB_TABLE}")
+end
+
 def setup_database(db, logger)
-  return if db.table_exists?(ELIB_TABLE)
+  unless db.table_exists?(ELIB_TABLE)
+    db.create_table(ELIB_TABLE) do
+      primary_key :id
+      String :record_key, size: 64, null: false, unique: true
+      String :large_category, text: true
+      String :sub_category, text: true
+      String :source, text: true
+      String :category, text: true
+      String :vendor_name, text: true
+      String :contract_number, text: true
+      TrueClass :is_closed_for_new_award, default: false
+      String :street_address, text: true
+      String :street_address_2, text: true
+      String :city, text: true
+      String :state_code, text: true
+      String :postal_code, text: true
+      String :country_code, text: true
+      String :phone_number, text: true
+      String :contact_email, text: true
+      String :email_domain, text: true
+      String :website_domain, text: true
+      Date :current_option_period_end_date
+      Date :ultimate_contract_end_date
+      String :uei, size: 12
+      TrueClass :is_small_business, default: false
+      TrueClass :is_other_than_small_business, default: false
+      TrueClass :is_woman_owned, default: false
+      TrueClass :is_women_owned_small_business, default: false
+      TrueClass :is_economically_disadvantaged_women_owned_small_business, default: false
+      TrueClass :is_veteran_owned, default: false
+      TrueClass :is_service_disabled_veteran_owned, default: false
+      TrueClass :is_small_disadvantaged_business, default: false
+      TrueClass :is_eight_a, default: false
+      TrueClass :is_eight_a_sole_source_pool, default: false
+      Date :eight_a_sole_source_exit_date
+      TrueClass :is_hubzone, default: false
+      TrueClass :is_tribally_owned_firm, default: false
+      TrueClass :is_american_indian_owned, default: false
+      TrueClass :is_alaskan_native_corporation_owned_firm, default: false
+      TrueClass :is_native_hawaiian_organization_owned_firm, default: false
+      TrueClass :is_eight_a_joint_venture_eligible, default: false
+      TrueClass :is_women_owned_joint_venture_eligible, default: false
+      TrueClass :is_service_disabled_veteran_owned_joint_venture_eligible, default: false
+      TrueClass :is_hubzone_joint_venture_eligible, default: false
+      TrueClass :is_cooperative_purchase, default: false
+      TrueClass :is_disaster_recovery, default: false
+      String :terms_url, text: true
+      String :price_list_url, text: true
+      String :view_catalog_url, text: true
+      DateTime :fetched_at, default: Sequel::CURRENT_TIMESTAMP
+      DateTime :db_updated_at, default: Sequel::CURRENT_TIMESTAMP
 
-  db.create_table(ELIB_TABLE) do
-    primary_key :id
-    String :record_key, size: 64, null: false, unique: true
-    String :large_category, text: true
-    String :sub_category, text: true
-    String :source, text: true
-    String :category, text: true
-    String :vendor_name, text: true
-    String :contract_number, text: true
-    TrueClass :is_closed_for_new_award, default: false
-    String :street_address, text: true
-    String :street_address_2, text: true
-    String :city, text: true
-    String :state_code, text: true
-    String :postal_code, text: true
-    String :country_code, text: true
-    String :phone_number, text: true
-    String :contact_email, text: true
-    String :email_domain, text: true
-    String :website_domain, text: true
-    Date :current_option_period_end_date
-    Date :ultimate_contract_end_date
-    String :uei, size: 12
-    TrueClass :is_small_business, default: false
-    TrueClass :is_other_than_small_business, default: false
-    TrueClass :is_woman_owned, default: false
-    TrueClass :is_women_owned_small_business, default: false
-    TrueClass :is_economically_disadvantaged_women_owned_small_business, default: false
-    TrueClass :is_veteran_owned, default: false
-    TrueClass :is_service_disabled_veteran_owned, default: false
-    TrueClass :is_small_disadvantaged_business, default: false
-    TrueClass :is_eight_a, default: false
-    TrueClass :is_eight_a_sole_source_pool, default: false
-    Date :eight_a_sole_source_exit_date
-    TrueClass :is_hubzone, default: false
-    TrueClass :is_tribally_owned_firm, default: false
-    TrueClass :is_american_indian_owned, default: false
-    TrueClass :is_alaskan_native_corporation_owned_firm, default: false
-    TrueClass :is_native_hawaiian_organization_owned_firm, default: false
-    TrueClass :is_eight_a_joint_venture_eligible, default: false
-    TrueClass :is_women_owned_joint_venture_eligible, default: false
-    TrueClass :is_service_disabled_veteran_owned_joint_venture_eligible, default: false
-    TrueClass :is_hubzone_joint_venture_eligible, default: false
-    TrueClass :is_cooperative_purchase, default: false
-    TrueClass :is_disaster_recovery, default: false
-    String :terms_url, text: true
-    String :price_list_url, text: true
-    String :view_catalog_url, text: true
-    DateTime :fetched_at, default: Sequel::CURRENT_TIMESTAMP
-    DateTime :db_updated_at, default: Sequel::CURRENT_TIMESTAMP
+      index :contract_number
+      index :vendor_name
+      index :uei
+      index :email_domain
+      index :website_domain
+      index %i[contract_number uei]
+    end
 
-    index :contract_number
-    index :vendor_name
-    index :uei
-    index :email_domain
-    index :website_domain
-    index %i[contract_number uei]
+    logger.info("Created table: #{ELIB_TABLE}")
   end
 
-  logger.info("Created table: #{ELIB_TABLE}")
+  ensure_generated_columns(db, logger)
 end
 
 setup_database(DB, LOG)

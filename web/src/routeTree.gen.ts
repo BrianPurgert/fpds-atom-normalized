@@ -10,11 +10,17 @@
 
 import { Route as rootRouteImport } from './routes/__root'
 import { Route as NonGsaContractorsRouteImport } from './routes/non-gsa-contractors'
+import { Route as NewGsaContractorsRouteImport } from './routes/new-gsa-contractors'
 import { Route as IndexRouteImport } from './routes/index'
 
 const NonGsaContractorsRoute = NonGsaContractorsRouteImport.update({
   id: '/non-gsa-contractors',
   path: '/non-gsa-contractors',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const NewGsaContractorsRoute = NewGsaContractorsRouteImport.update({
+  id: '/new-gsa-contractors',
+  path: '/new-gsa-contractors',
   getParentRoute: () => rootRouteImport,
 } as any)
 const IndexRoute = IndexRouteImport.update({
@@ -25,27 +31,31 @@ const IndexRoute = IndexRouteImport.update({
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
+  '/new-gsa-contractors': typeof NewGsaContractorsRoute
   '/non-gsa-contractors': typeof NonGsaContractorsRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
+  '/new-gsa-contractors': typeof NewGsaContractorsRoute
   '/non-gsa-contractors': typeof NonGsaContractorsRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
+  '/new-gsa-contractors': typeof NewGsaContractorsRoute
   '/non-gsa-contractors': typeof NonGsaContractorsRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
-  fullPaths: '/' | '/non-gsa-contractors'
+  fullPaths: '/' | '/new-gsa-contractors' | '/non-gsa-contractors'
   fileRoutesByTo: FileRoutesByTo
-  to: '/' | '/non-gsa-contractors'
-  id: '__root__' | '/' | '/non-gsa-contractors'
+  to: '/' | '/new-gsa-contractors' | '/non-gsa-contractors'
+  id: '__root__' | '/' | '/new-gsa-contractors' | '/non-gsa-contractors'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
+  NewGsaContractorsRoute: typeof NewGsaContractorsRoute
   NonGsaContractorsRoute: typeof NonGsaContractorsRoute
 }
 
@@ -56,6 +66,13 @@ declare module '@tanstack/react-router' {
       path: '/non-gsa-contractors'
       fullPath: '/non-gsa-contractors'
       preLoaderRoute: typeof NonGsaContractorsRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/new-gsa-contractors': {
+      id: '/new-gsa-contractors'
+      path: '/new-gsa-contractors'
+      fullPath: '/new-gsa-contractors'
+      preLoaderRoute: typeof NewGsaContractorsRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/': {
@@ -70,6 +87,7 @@ declare module '@tanstack/react-router' {
 
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
+  NewGsaContractorsRoute: NewGsaContractorsRoute,
   NonGsaContractorsRoute: NonGsaContractorsRoute,
 }
 export const routeTree = rootRouteImport

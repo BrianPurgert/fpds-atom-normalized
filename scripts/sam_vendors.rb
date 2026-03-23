@@ -78,6 +78,7 @@ EXTRACT_DIR  = File.expand_path('../downloads/sam_extracts', __dir__)
 
 TABLE_NAME       = :sam_vendors
 TEMP_TABLE_NAME  = :sam_vendors_tmp
+TEMP_INDEX_PREFIX = 'sam_vendors_tmp_uei_sam_index'
 Dir.mkdir(EXTRACT_DIR) unless Dir.exist?(EXTRACT_DIR)
 
 LOG = Logger.new($stdout)
@@ -678,8 +679,9 @@ begin
 
   LOG.info "Finished reading file. Total rows inserted: #{total_processed}"
 
-  LOG.info "Adding index on uei_sam to temporary table..."
-  DB.add_index TEMP_TABLE_NAME, :uei_sam
+  temp_index_name = :"#{TEMP_INDEX_PREFIX}_#{Process.pid}_#{Time.now.to_i}_#{Time.now.nsec}"
+  LOG.info "Adding index on uei_sam to temporary table (#{temp_index_name})..."
+  DB.add_index TEMP_TABLE_NAME, :uei_sam, name: temp_index_name
 
   LOG.info "Swapping temporary table to production table..."
   DB.transaction do

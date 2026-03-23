@@ -477,3 +477,65 @@ export const getNonGsaContractors = createServerFn({ method: 'GET' })
       limit,
     }
   })
+
+export type NewGsaContractor = {
+  record_key: string
+  vendor_name: string | null
+  contract_number: string | null
+  uei: string | null
+  source: string | null
+  phone_number: string | null
+  contact_email: string | null
+  contract_start_date: string
+  current_option_period_end_date: string | null
+  ultimate_contract_end_date: string | null
+}
+
+export type NewGsaContractorsResponse = {
+  results: NewGsaContractor[]
+  page: number
+  limit: number
+}
+
+export const getNewGsaContractors = createServerFn({ method: 'GET' })
+  .inputValidator((params: { page?: number; limit?: number } | undefined) => {
+    return {
+      page: params?.page ?? 1,
+      limit: params?.limit ?? 50,
+    }
+  })
+  .handler(async ({ data }): Promise<NewGsaContractorsResponse> => {
+    const db = getSupabase()
+    const page = data.page
+    const limit = data.limit
+    const offset = (page - 1) * limit
+
+    const { data: results, error } = await db
+      .from('elibrary')
+      .select(`
+        record_key,
+        vendor_name,
+        contract_number,
+        uei,
+        source,
+        phone_number,
+        contact_email,
+        contract_start_date,
+        current_option_period_end_date,
+        ultimate_contract_end_date
+      `)
+      .not('contract_start_date', 'is', null)
+      .order('contract_start_date', { ascending: false, nullsFirst: false })
+      .range(offset, offset + limit - 1)
+
+    if (error) {
+      console.error('getNewGsaContractors error:', error)
+      throw new Error(`Failed to fetch new GSA contractors: ${error.message}`)
+    }
+
+    return {
+      results: results as NewGsaContractor[],
+      page,
+      limit,
+    }
+  })
