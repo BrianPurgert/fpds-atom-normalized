@@ -486,6 +486,8 @@ export type NewGsaContractor = {
   source: string | null
   phone_number: string | null
   contact_email: string | null
+  email_domain: string | null
+  website_domain: string | null
   contract_start_date: string
   current_option_period_end_date: string | null
   ultimate_contract_end_date: string | null
@@ -520,6 +522,8 @@ export const getNewGsaContractors = createServerFn({ method: 'GET' })
         source,
         phone_number,
         contact_email,
+        email_domain,
+        website_domain,
         contract_start_date,
         current_option_period_end_date,
         ultimate_contract_end_date

@@ -75,12 +75,14 @@ function NewGsaContractorsPage() {
               <th className="fpds-table-header">Ultimate Contract End</th>
               <th className="fpds-table-header">Phone Number</th>
               <th className="fpds-table-header">Email</th>
+              <th className="fpds-table-header">Email Domain</th>
+              <th className="fpds-table-header">Website Domain</th>
             </tr>
           </thead>
           <tbody>
             {results.length === 0 ? (
               <tr>
-                <td colSpan={9} style={{ textAlign: 'center', padding: '20px' }}>No contractors found.</td>
+                <td colSpan={11} style={{ textAlign: 'center', padding: '20px' }}>No contractors found.</td>
               </tr>
             ) : (
               results.map((contractor) => (
@@ -100,6 +102,8 @@ function NewGsaContractorsPage() {
                       'N/A'
                     )}
                   </td>
+                  <td className="fpds-table-cell">{contractor.email_domain || 'N/A'}</td>
+                  <td className="fpds-table-cell">{contractor.website_domain || 'N/A'}</td>
                 </tr>
               ))
             )}
