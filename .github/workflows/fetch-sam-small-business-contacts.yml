@@ -1,0 +1,57 @@
+name: SAM Small Business Contacts
+# Description: Pulls SBA profile/contact data for SAM small businesses into PostgreSQL.
+
+on:
+  schedule:
+    - cron: '30 6 * * *'
+  workflow_dispatch: {}
+
+permissions:
+  contents: read
+
+concurrency:
+  group: sam-small-business-contacts
+  cancel-in-progress: false
+
+jobs:
+  run-import:
+    name: Run fetch_sam_small_business_contacts.rb
+    runs-on: ubuntu-latest
+    timeout-minutes: 300
+    env:
+      POSTGRES_URL: ${{ secrets.POSTGRES_URL }}
+      PG_URL: ${{ secrets.PG_URL }}
+      POSTGRES_HOST: ${{ secrets.POSTGRES_HOST }}
+      POSTGRES_DATABASE: ${{ secrets.POSTGRES_DATABASE }}
+      POSTGRES_USER: ${{ secrets.POSTGRES_USER }}
+      POSTGRES_PASSWORD: ${{ secrets.POSTGRES_PASSWORD }}
+      POSTGRES_SSLMODE: ${{ secrets.POSTGRES_SSLMODE }}
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Ruby
+        uses: ruby/setup-ruby@v1
+        with:
+          ruby-version: '3.2'
+          bundler-cache: true
+
+      - name: Install system dependencies (for pg gem)
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libpq-dev
+
+      - name: Prepare DB environment
+        shell: bash
+        run: |
+          if [ -z "${POSTGRES_URL}" ] && [ -n "${PG_URL}" ]; then
+            echo "POSTGRES_URL=${PG_URL}" >> "$GITHUB_ENV"
+          fi
+
+      - name: Run SBA contact import
+        if: ${{ env.POSTGRES_URL != '' || env.PG_URL != '' || env.POSTGRES_HOST != '' }}
+        run: bundle exec ruby scripts/fetch_sam_small_business_contacts.rb
+
+      - name: Skip (no DB configuration found)
+        if: ${{ !(env.POSTGRES_URL != '' || env.PG_URL != '' || env.POSTGRES_HOST != '') }}
+        run: echo "No database connection secrets configured. Set POSTGRES_URL or PG_URL, or POSTGRES_HOST/POSTGRES_DATABASE/POSTGRES_USER/POSTGRES_PASSWORD."
