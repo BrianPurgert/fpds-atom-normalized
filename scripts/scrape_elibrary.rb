@@ -362,7 +362,9 @@ class GSAElibraryScheduleImporter
     return false if s.empty?
     return false if %w[false f no n 0 none n/a na].include?(s)
     return true if %w[true t yes y 1 x].include?(s)
-    false
+    # eLibrary uses non-boolean indicator codes like "s", "w", "wo", "dv", "8a".
+    # For these columns, any non-empty value that isn't an explicit negative marker means "present".
+    true
   end
 
   def to_date(value)
